@@ -27,10 +27,11 @@ classifiers = [
 ]
 dependencies = [
     "numpy",
-    "xarray",
+    # Xarray 2026.4+ requires zarr-python 3; keep this release on the v2 backend.
+    "xarray<2026.4",
     "dask",
     "distributed",
-    "zarr<3",
+    "zarr>=2.18,<3",
     "netCDF4",
     "pyyaml",
     "scipy",

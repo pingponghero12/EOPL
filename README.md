@@ -19,8 +19,9 @@ python -m pip install -e '.[test,notebook]'
 ```
 
 The source build requires a C++17 compiler and CMake 3.22 or newer. Build
-isolation installs the Python build dependencies. CMake detects CUDA when
-available; to explicitly build the CPU version:
+isolation installs its Python build dependencies. This release uses Xarray
+below 2026.4 with Zarr-Python 2.x; newer Xarray releases require Zarr-Python 3.
+CMake detects CUDA when available; to explicitly build the CPU version:
 
 ```bash
 python -m pip install -e '.[test,notebook]' \

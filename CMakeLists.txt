@@ -8,6 +8,7 @@ include(CheckLanguage)
 check_language(CUDA)
 
 # Find Pybind11 (Provided by pip)
+set(PYBIND11_FINDPYTHON ON)
 find_package(pybind11 CONFIG REQUIRED)
 
 # Expose the include directory
@@ -19,6 +20,7 @@ file(GLOB SOURCE_FILES "eopl/ops/cpp/src/*.cpp")
 if(CMAKE_CUDA_COMPILER) 
     message(STATUS "Found CUDA compiler. Compilation with GPU support.")
     enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
     set(CMAKE_CUDA_STANDARD 17)
     
     # Dynamically gather all CUDA source files
@@ -36,6 +38,8 @@ if(CMAKE_CUDA_COMPILER)
     set_target_properties(eopl_cpp_core PROPERTIES CUDA_ARCHITECTURES "61")
     # Flag at CXX level
     target_compile_definitions(eopl_cpp_core PRIVATE EOPL_USE_CUDA)
+    # The C++ wrapper includes CUDA headers and calls the runtime directly.
+    target_link_libraries(eopl_cpp_core PRIVATE CUDA::cudart)
 endif()
 
 # Install the compiled shared library into the eopl directory
