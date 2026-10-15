@@ -1,0 +1,14 @@
+.venv*
+*__pycache__*
+examples/**/outputs/
+
+examples/prototype_*/input/
+examples/**/algorithms/*.so
+
+# Generated metadata, caches, and build output
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.coverage
+htmlcov/

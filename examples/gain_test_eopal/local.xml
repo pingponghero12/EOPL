@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IOM_Local_Configuration version="01.00.00">
+    <parameter name="Lambda" type="FLOAT" units="nm">500.3</parameter>
+</IOM_Local_Configuration>

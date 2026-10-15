@@ -1,0 +1,47 @@
+[build-system]
+requires = [
+    "scikit-build-core>=0.5.0",
+    "pybind11>=2.10.0"
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "eopl"
+version = "0.1.0"
+description = "Earth Observation Processing Library with CUDA backend"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Manfred Gawlas", email = "manfredgawlas12@gmail.com"}
+]
+dependencies = [
+    "numpy",
+    "xarray",
+    "dask",
+    "distributed",
+    "zarr<3",
+    "netCDF4",
+    "pyyaml",
+    "scipy",
+    "matplotlib"
+]
+
+[project.optional-dependencies]
+notebook = [
+    "jupyterlab",
+    "ipykernel",
+]
+test = [
+    "pytest>=7",
+    "pytest-cov>=4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.scikit-build]
+cmake.version = ">=3.21"
+cmake.build-type = "Release"
+wheel.packages = ["eopl"]

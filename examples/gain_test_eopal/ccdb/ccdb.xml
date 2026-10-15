@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CalibrationDataBase version="01.00.00">
+    <parameter name="gain_array_1d" description="Per-pixel gain" type="FILE" units="dimensionless">gain_array_1d</parameter>
+</CalibrationDataBase>

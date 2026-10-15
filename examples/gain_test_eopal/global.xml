@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Global_Configuration version="01.00.00">
+    <parameter name="MissionID" type="STRING">Sentinel3</parameter>
+    <parameter name="CCDBPath" type="STRING">ccdb/</parameter>
+    <parameter name="RandomSeed" type="INTEGER">42</parameter>
+</Global_Configuration>

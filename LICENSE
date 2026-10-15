@@ -1,0 +1,40 @@
+Study Reproduction and Evaluation License 1.0
+
+Copyright (c) 2026 Manfred Gawlas. All rights reserved.
+
+This software is an unreleased research snapshot supplied solely to reproduce,
+verify, validate, peer review, or otherwise evaluate the scientific study:
+
+"A Prototype Scientific Scene Generation Module for Lunar Spectroscopy:
+Toward End-to-End Performance Simulation of Moon-Mapping Instruments."
+
+Permission is granted, without fee, to download, execute, and make internal
+modifications to this software only to the extent reasonably necessary for the
+non-commercial reproduction and evaluation of that study. Scientific findings
+obtained from such use may be published, provided that the study, software, and
+associated dataset are appropriately cited.
+
+An unmodified or modified copy may be shared only with collaborators or
+reviewers participating in that reproduction or evaluation, under these same
+terms and with this licence and all attribution notices intact.
+
+The following are not permitted without separate prior written permission from
+the copyright holder:
+
+1. use for a commercial purpose or monetary advantage;
+2. use in production, operational, consultancy, or commercial research and
+   development activities;
+3. use for a project unrelated to reproducing or evaluating the named study;
+4. public redistribution, relicensing, sublicensing, sale, or incorporation
+   into another software product or service; or
+5. use of the names, marks, or affiliations of the authors to imply endorsement.
+
+This is a source-available, restricted research licence. It is not an
+open-source licence. No patent, trademark, or other rights are granted. All
+rights not expressly granted above are reserved by the copyright holder.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, CORRECTNESS, OR REPRODUCIBILITY.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY ARISING FROM OR RELATED TO THE SOFTWARE OR ITS USE.

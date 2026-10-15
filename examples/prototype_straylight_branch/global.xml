@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Global_Configuration version="01.00.00">
+    <parameter name="MissionID" type="STRING">DemoMission</parameter>
+    <parameter name="RandomSeed" type="INTEGER">42</parameter>
+</Global_Configuration>
