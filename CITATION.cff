@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use EOPL in your research, please cite this software using the metadata below."
+type: software
+title: "EOPL: Earth Observation Processing Library"
+version: 0.1.0
+authors:
+  - family-names: Gawlas
+    given-names: Manfred
+license: Apache-2.0
+repository-code: "https://github.com/pingponghero12/EOPL"
+url: "https://github.com/pingponghero12/EOPL"
+abstract: >-
+  Earth observation pipeline orchestration with NetCDF and Zarr products,
+  checkpoints, editable Python and Jupyter reports, precision analysis,
+  and comparisons between simulation runs.
+keywords:
+  - Earth observation
+  - scientific pipelines
+  - simulation
+  - reproducibility

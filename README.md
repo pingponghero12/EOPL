@@ -170,3 +170,13 @@ CI builds and installs the CPU distribution before running the tests on
 Python 3.10–3.12. It also checks source/wheel packaging and notebook structure.
 GPU transfer tests use mocked backends; the separate CUDA build job is a
 compilation check, not a hardware execution test.
+
+## License and citation
+
+EOPL is licensed under [Apache-2.0](LICENSE). Copyright and attribution
+information is provided in [NOTICE](NOTICE).
+
+If you use EOPL in research, please cite the software using
+[CITATION.cff](CITATION.cff), also available through GitHub's **Cite this
+repository** button. Academic citation is requested, not required by the
+Apache-2.0 license. EOPAL and other dependencies retain their own licenses.
