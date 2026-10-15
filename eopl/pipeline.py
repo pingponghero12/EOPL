@@ -263,6 +263,8 @@ class Pipeline:
             parser.error("Supply all four ICD paths: global local input output")
         paths = options.paths or ["global.xml", "local.xml", "input/input_image.nc", "outputs"]
         args = dict(zip(("global_config_path", "local_config_path", "input_path", "output_root"), paths))
+        if options.precision_analysis and not (Path(args["output_root"]) / "run_manifest.yaml").exists():
+            parser.error("Run the baseline without --precision-analysis first")
         self._is_pa_run = options.precision_analysis
         self._comparison_manifest_path = None
         if options.dir is not None:
@@ -366,6 +368,10 @@ class Pipeline:
         self._generate_breakpoints = enabled
 
     def setup_precision_analysis(self, precision: str = "float64", threshold_mean_abs_diff: float = 1e-7):
+        if precision != "float64":
+            raise ValueError("Precision replay currently supports float64 only.")
+        if not np.isfinite(threshold_mean_abs_diff) or threshold_mean_abs_diff < 0:
+            raise ValueError("The precision-analysis threshold must be finite and nonnegative.")
         self.manifest["precision_analysis"] = {
             "enabled": True,
             "comparison_precision": precision,
@@ -1260,9 +1266,10 @@ if __name__ == "__main__":
         
         # We read the manifest from disk because self.manifest in the PA run 
         # doesn't contain the breakpoint history (we skipped appending to it).
-        if not manifest_path.exists():
-            self.log.error(f"Cannot generate PA report: Manifest {manifest_path} not found. Did you run the nominal pass first?")
+        if not self.manifest.get("report_config", {}).get("enabled", False):
             return
+        if not manifest_path.exists():
+            raise FileNotFoundError(f"Run the nominal pass first: missing {manifest_path}")
 
         with open(manifest_path, "r") as f:
             nominal_manifest = yaml.safe_load(f)

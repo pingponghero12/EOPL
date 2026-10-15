@@ -12,3 +12,6 @@ build/
 dist/
 .coverage
 htmlcov/
+coverage_html/
+.ipynb_checkpoints/
+.DS_Store

@@ -1,6 +1,7 @@
 """Notebook reports retain product sections and executable inspection examples."""
 import json
 
+import nbformat
 import numpy as np
 import pytest
 import xarray as xr
@@ -38,6 +39,7 @@ def test_notebook_sections_and_precision_replay(tmp_path, with_input):
     assert not (pipeline._output_root / 'report_pa.py').exists()
     for filename in ('report.ipynb', 'report_pa.ipynb'):
         notebook = json.loads((pipeline._output_root / filename).read_text())
+        nbformat.validate(nbformat.from_dict(notebook))
         assert notebook['nbformat'] == 4
         assert notebook['metadata']['kernelspec']['name'] == 'python3'
         for cell in notebook['cells']:

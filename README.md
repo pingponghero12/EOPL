@@ -1,102 +1,172 @@
 # EOPL
 
-Earth Observation Processing Library orchestration for configurable scientific
-pipelines, NetCDF/Zarr products, breakpoints, precision analysis, Dask, and
-CPU/CUDA execution through EOPAL operations.
+Earth Observation Processing Library: orchestration for scientific pipelines,
+NetCDF/Zarr products, checkpoints, and editable Python or Jupyter reports.
 
-The simulator uses Band Sequential (BSQ) layout because its most demanding
-operations are expected to be the high-resolution convolutions and
-deconvolutions performed by early SGM and IOM processing stages.
+This is the first development release, version 0.1.0. The CPU workflows are
+covered by automated tests. CUDA code is retained, but GPU execution has not
+been validated for this release.
 
-`image_t` contains one `xarray.DataArray` plus the synchronization state needed
-to cache that image on a GPU. Pipeline variables are kept separately by the
-`Pipeline` and are assembled into an `xarray.Dataset` only at a checkpoint or
-final save.
+## Installation
 
-Operations use ordinary Python arguments and return values:
+Python 3.10 or newer is required. From this repository:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[test,notebook]'
+```
+
+The source build requires a C++17 compiler and CMake 3.22 or newer. Build
+isolation installs the Python build dependencies. CMake detects CUDA when
+available; to explicitly build the CPU version:
+
+```bash
+python -m pip install -e '.[test,notebook]' \
+  -Ccmake.define.CMAKE_CUDA_COMPILER=NOTFOUND
+```
+
+EOPL can run ordinary Python operations without EOPAL. The gain and straylight
+examples use EOPAL operations; install the sibling project separately:
+
+```bash
+python -m pip install -e ../EOPAL
+```
+
+EOPAL has its own installation requirements and license. A notebook frontend
+must use the environment where EOPL is installed. PDF export additionally
+requires `pdflatex`; without it, the LaTeX source and figures are still saved.
+
+## Operation interface
+
+An image is an `image_t` containing one `xarray.DataArray`. The usual image
+layout is `(Channels, ALT, ACT)`, with ACT contiguous. Operations consume one
+image or a tuple and return ordinary Python values:
 
 ```python
-image, topology, samples, score = pipeline.run_operation(
+image, topology = pipeline.run_operation(
     data=image,
-    func=generate_topology,
+    func=derive_topology,
     args={},
 )
-
 image = pipeline.run_operation(
     data=(image, topology),
     func=apply_surface_model,
     args={},
 )
+pipeline.save_output((image, topology), 'final_output')
 ```
 
-An operation declares how it uses each image once, beside its implementation:
+Declare `input_access`, `dask_support`, and `cuda_support` beside an operation:
 
 ```python
-apply_surface_model.input_access = ("readwrite", "read")
+apply_surface_model.input_access = ('readwrite', 'read')
+apply_surface_model.dask_support = True
+apply_surface_model.cuda_support = False
 ```
 
-EOPL uses this metadata and each image's freshness state to transfer only stale
-host/device copies. A Dask-backed input makes that operation CPU/Dask-only; it
-does not turn off the pipeline's CUDA preference for later operations.
+Use `run_function` for image-free computations. Store their outputs with
+`add_variable`; variables are combined with images into a Dataset when saving.
+`pinned=True` keeps a variable available after checkpoints clean temporary
+variables. `start_bkp(label)` resumes from a previously saved checkpoint.
 
-Image-free modules such as geometry use `run_function` and pipeline variables:
+## Examples
+
+Each example is self-contained. Run from its own directory:
+
+```bash
+cd examples/gain_test_eopal
+python run.py
+```
+
+The three examples are:
+
+- `gain_test_eopal`: Python and EOPAL C++ gain operations, CCDB interpolation,
+  checkpoints, and a commented multiplication-by-two comparison experiment.
+- `prototype_geometry_module`: a Python circular-orbit demonstration using
+  `run_function` and pipeline-owned variables, without an image input.
+- `prototype_straylight_branch`: downsampling, a simple straylight model,
+  resampling, and saving both the image and straylight products. Run
+  `python setup_test_data.py` before its first execution.
+
+These algorithms demonstrate interfaces rather than validated mission physics.
+Python, Dask, and C++ variants are grouped per algorithm under `algorithms/`;
+geometry deliberately has only Python. For Dask, select the `_dask` functions
+and set `dask=True` on input and checkpoint calls. The local straylight C++
+example compiles its kernels with `c++` on Linux; EOPAL provides the gain core.
+
+Scripts also accept the four ICD paths:
+
+```bash
+python run.py global.xml local.xml input/input_image.nc outputs
+```
+
+Paths are relative to the calling directory. The example config files and
+CCDBs remain in their respective example directories.
+
+## Reports and run comparison
+
+Choose the generated format in `run.py`:
 
 ```python
-time, position = pipeline.run_function(func=simulate_geometry, args={})
-pipeline.add_variable("time", time, dims=("time",), pinned=True)
-pipeline.add_variable("position", position, dims=("time", "xyz"), pinned=True)
-pipeline.save_output("geometry")
+pl.generate_report(True, report_format='ipynb', print_all_bkp_data=True)
 ```
 
-The four examples in `examples/` keep EOPL interface calls in `run.py` and
-Python, Dask, and C++ implementations together in each `algorithms/` directory.
-
-## Installation for development
-
-From the directory containing both `EOPL` and `EOPAL`, create a clean virtual
-environment and install both projects in editable mode:
+`report_format='py'` generates an editable `report.py`; `'ipynb'` generates
+`report.ipynb`. Reports include metadata, optional CCDB examples, the original
+input, breakpoints, and final products. Open or execute the selected artifact:
 
 ```bash
-cd /path/to/E2ES
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e "./EOPAL[test]"
-python -m pip install -e "./EOPL[test]"
+jupyter lab outputs/report.ipynb
+python outputs/report.py --author 'Your Name'
 ```
 
-The native extensions are built automatically. If CUDA and `nvcc` are found,
-CUDA support is compiled; otherwise a CPU-only extension is built.
+In notebooks, inspect `input_data.dataset` or `product_1.dataset`. To plot an
+image, select a DataArray and slice extra dimensions, for example
+`input_data.dataset['default_image'].isel(Channels=0).plot()`.
+Optional PDF export writes under `outputs/pdf/`. Source input and CCDB paths
+are recorded in the manifest; keep those files available when running reports.
+
+For a same-precision study comparison, first run the baseline without `--dir`,
+then change the operation or configuration and choose a named output directory:
 
 ```bash
-python -m pip uninstall -y eopl eopal
-python -m pip install -e "./EOPAL[test]"
-python -m pip install -e "./EOPL[test]"
+python run.py
+# Change an operation, such as the commented x2 block in the gain example.
+python run.py --dir doubled
+jupyter lab outputs/doubled/report_comparison.ipynb
 ```
 
-## Tests and coverage
+The named run preserves the baseline and writes its own products, ordinary
+report, and comparison report. Comparisons match checkpoint labels and compare
+final products. The report format follows `generate_report`; with Python
+output, run `python outputs/doubled/report_comparison.py`. Keep the baseline
+beside its named runs. Reusing an existing name replaces that named run.
 
-Run the suites independently from the `E2ES` directory:
+For precision analysis, enable `setup_precision_analysis` in the pipeline and
+replay the baseline at float64:
 
 ```bash
-python -m pytest EOPAL/tests
-python -m pytest EOPL/tests
+python run.py
+python run.py --precision-analysis
+jupyter lab outputs/report_pa.ipynb
 ```
 
-Run both suites together:
+Use the same input, checkpoint labels, and output format for both passes.
+The replay writes `*_pa` products and a precision report, preserving the nominal
+manifest. `--dir` and `--precision-analysis` are separate modes. Dask operation
+timings measure graph construction; checkpoint and total timings include
+computation and I/O.
+
+## Validation
 
 ```bash
-python -m pytest EOPL/tests EOPAL/tests --import-mode=importlib
+python -m pytest
+python -m pytest --cov=eopl --cov-report=term-missing --cov-report=html:coverage_html
 ```
 
-Generate terminal and HTML coverage reports for both packages:
-
-```bash
-python -m pytest EOPL/tests EOPAL/tests --import-mode=importlib \
-  --cov=eopl --cov=eopal --cov-report=term-missing \
-  --cov-report=html:coverage_html
-```
-
-Open `coverage_html/index.html` to browse the detailed report. GPU tests are not
-run without hardware; CI compiles the CUDA target as a build-only check. Report
-generation and precision-analysis code are intentionally not covered yet.
+CI builds and installs the CPU distribution before running the tests on
+Python 3.10–3.12. It also checks source/wheel packaging and notebook structure.
+GPU transfer tests use mocked backends; the separate CUDA build job is a
+compilation check, not a hardware execution test.
