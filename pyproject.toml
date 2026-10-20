@@ -65,3 +65,20 @@ sdist.exclude = [
     ".pytest_cache", "**/__pycache__", "*.egg-info", "build", "dist",
     "**/outputs", "examples/prototype_*/input", "**/*.so", ".coverage", "htmlcov",
 ]
+
+[tool.cibuildwheel]
+# Match the Python versions currently covered by CI.
+build = "cp310-* cp311-* cp312-*"
+skip = "*-musllinux_*"
+archs = ["native"]
+test-extras = ["test"]
+test-command = [
+    'python -c "import eopl.eopl_cpp_core"',
+    'python -m pip check',
+    'python -m pytest "{project}/tests"',
+]
+environment = { MPLBACKEND = "Agg" }
+
+[tool.cibuildwheel.config-settings]
+# Published wheels run on machines without the CUDA toolkit.
+"cmake.define.CMAKE_CUDA_COMPILER" = "NOTFOUND"
