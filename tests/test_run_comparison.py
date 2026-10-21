@@ -1,5 +1,6 @@
 """Named runs preserve the baseline and compare products with the same precision."""
 import json
+from pathlib import Path
 import runpy
 import sys
 
@@ -26,7 +27,7 @@ def test_named_run_and_comparison_report(tmp_path, monkeypatch, report_format, f
     original_manifest = (tmp_path / 'outputs/run_manifest.yaml').read_bytes()
     variant = Pipeline()
     args = variant.parse_arguments(['--dir', 'doubled'])
-    assert args['output_root'] == 'outputs/doubled'
+    assert Path(args['output_root']) == Path('outputs') / 'doubled'
     variant.set_run_options(precision='float32')
     variant.generate_report(True, report_format=report_format)
     variant.setup_precision_analysis()

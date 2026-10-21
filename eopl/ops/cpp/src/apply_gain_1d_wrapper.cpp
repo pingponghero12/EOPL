@@ -87,21 +87,22 @@ py::tuple apply_gain_1d_wrapper(
         throw std::runtime_error("EOPL was installed without CUDA support. Please run with use_cuda=False.");
 #endif
     } else {
-        if (img_info.format == py::format_descriptor<float>::format()) {
+        if (img_info.item_type_is_equivalent_to<float>()) {
             EOPLTensor<float> tensor = {
                 static_cast<float*>(img_info.ptr), ACT, ALT, Channels, false
             };
             apply_gain_1d_cpu(
                 tensor, static_cast<float*>(gain_info.ptr), stride, gain_size
             );
-        } else if (img_info.format == py::format_descriptor<double>::format()) {
+        } else if (img_info.item_type_is_equivalent_to<double>()) {
             EOPLTensor<double> tensor = {
                 static_cast<double*>(img_info.ptr), ACT, ALT, Channels, false
             };
             apply_gain_1d_cpu(
                 tensor, static_cast<double*>(gain_info.ptr), stride, gain_size
             );
-        } else if (img_info.format == py::format_descriptor<std::uint32_t>::format()) {
+        } else if (img_info.item_type_is_equivalent_to<std::uint32_t>()) {
+            // uint32 may use either unsigned int or unsigned long on Windows.
             EOPLTensor<std::uint32_t> tensor = {
                 static_cast<std::uint32_t*>(img_info.ptr), ACT, ALT, Channels, false
             };

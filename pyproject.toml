@@ -32,7 +32,8 @@ dependencies = [
     "dask",
     "distributed",
     "zarr>=2.18,<3",
-    "netCDF4",
+    # 1.7.5 requires macOS 15 for wheels; keep macOS 14 installs precompiled.
+    "netCDF4>=1.7.4,<1.7.5",
     "pyyaml",
     "scipy",
     "matplotlib"
@@ -65,3 +66,20 @@ sdist.exclude = [
     ".pytest_cache", "**/__pycache__", "*.egg-info", "build", "dist",
     "**/outputs", "examples/prototype_*/input", "**/*.so", ".coverage", "htmlcov",
 ]
+
+[tool.cibuildwheel]
+# Match the Python versions currently covered by CI.
+build = "cp310-* cp311-* cp312-*"
+skip = "*-musllinux_*"
+archs = ["native"]
+test-extras = ["test"]
+test-command = [
+    'python -c "import eopl.eopl_cpp_core"',
+    'python -m pip check',
+    'python -m pytest "{project}/tests"',
+]
+environment = { MPLBACKEND = "Agg" }
+
+[tool.cibuildwheel.config-settings]
+# Published wheels run on machines without the CUDA toolkit.
+"cmake.define.CMAKE_CUDA_COMPILER" = "NOTFOUND"
