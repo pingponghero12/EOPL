@@ -22,3 +22,12 @@ def test_cpu_gain_matches_python(dtype, dimension):
     apply_gain_1d(python_image, gain, options, dimension)
     apply_gain_1d_cpp(native_image, gain, options, dimension)
     xr.testing.assert_identical(python_image.image(), native_image.image())
+
+
+@pytest.mark.parametrize('dtype', ['int32', 'uint16', 'uint64', '>u4'])
+def test_native_cpu_gain_rejects_unsupported_dtypes(dtype):
+    core = pytest.importorskip('eopl.eopl_cpp_core')
+    image = np.ones((2, 3, 4), dtype=dtype)
+    gain = np.ones(4, dtype=dtype)
+    with pytest.raises(ValueError, match='CPU execution supports'):
+        core.apply_gain_1d(image, gain, False, False, 0, 'ACT')

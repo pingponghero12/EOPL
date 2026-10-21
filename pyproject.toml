@@ -32,7 +32,8 @@ dependencies = [
     "dask",
     "distributed",
     "zarr>=2.18,<3",
-    "netCDF4",
+    # 1.7.5 requires macOS 15 for wheels; keep macOS 14 installs precompiled.
+    "netCDF4>=1.7.4,<1.7.5",
     "pyyaml",
     "scipy",
     "matplotlib"
