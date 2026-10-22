@@ -2,8 +2,8 @@ import numpy as np
 from eopl.pipeline import Pipeline
 from eopl import utils
 
-# Python, Dask, and EOPAL C++ implementations
-from algorithms.gain import apply_gain_1d, apply_gain_1d_dask, apply_gain_1d_cpp
+# Python, Dask, and C++ implementations
+from eopl.algorithms.gain import apply_gain_1d, apply_gain_1d_dask, apply_gain_1d_cpp
 
 # Compare two runs from this example directory:
 # 1. python run.py

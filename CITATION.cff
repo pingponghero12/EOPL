@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use EOPL in your research, please cite this software using the metadata below."
 type: software
 title: "EOPL: Earth Observation Processing Library"
-version: 0.1.0
+version: 0.2.0
 authors:
   - family-names: Gawlas
     given-names: Manfred

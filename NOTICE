@@ -1,4 +1,7 @@
 EOPL — Earth Observation Processing Library
 Copyright 2026 Manfred Gawlas
 
+Includes processing algorithms originally developed as EOPAL by Manfred Gawlas,
+now integrated into EOPL under the Apache License, Version 2.0.
+
 Licensed under the Apache License, Version 2.0.

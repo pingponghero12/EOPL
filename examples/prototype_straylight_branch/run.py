@@ -1,4 +1,4 @@
-"""Runnable demonstration using the EOPL / EOPAL interface."""
+"""Runnable demonstration using the EOPL interface."""
 
 from eopl.pipeline import Pipeline
 from algorithms.downsample_for_straylight import (

@@ -1,7 +1,7 @@
 """Python, Dask, and C++ implementations of add_straylight."""
 import ctypes
 import numpy as np
-from eopal.data import image_t
+from eopl import image_t
 from .native import kernel, double_array, DOUBLE_PTR, SIZE
 
 

@@ -12,10 +12,10 @@ set(PYBIND11_FINDPYTHON ON)
 find_package(pybind11 CONFIG REQUIRED)
 
 # Expose the include directory
-include_directories(eopl/ops/cpp/include)
+include_directories(eopl/algorithms/cpp/include)
 
 # Dynamically gather all C++ source files
-file(GLOB SOURCE_FILES "eopl/ops/cpp/src/*.cpp")
+file(GLOB SOURCE_FILES "eopl/algorithms/cpp/src/*.cpp")
 
 if(CMAKE_CUDA_COMPILER) 
     message(STATUS "Found CUDA compiler. Compilation with GPU support.")
@@ -24,7 +24,7 @@ if(CMAKE_CUDA_COMPILER)
     set(CMAKE_CUDA_STANDARD 17)
     
     # Dynamically gather all CUDA source files
-    file(GLOB CUDA_SOURCES "eopl/ops/cpp/src/*.cu")
+    file(GLOB CUDA_SOURCES "eopl/algorithms/cpp/src/*.cu")
     list(APPEND SOURCE_FILES ${CUDA_SOURCES})
 else()
     message(STATUS "CUDA compiler not found. Compiling pure C++ version")
