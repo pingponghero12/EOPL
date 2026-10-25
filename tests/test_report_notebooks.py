@@ -58,7 +58,7 @@ def test_notebook_sections_and_precision_replay(tmp_path, with_input, full_repor
     assert "product_1 = report.load_bkp('after-operation')" in text
     if with_input:
         assert text.index('## Input NetCDF') < text.index('## Custom Pipeline Reporting')
-        assert "# input_data.dataset['image'].isel({'Channels': 0}).plot()" in text
+        assert "# input_data['image'].isel({'Channels': 0}).plot()" in text
     else:
         assert '## Input NetCDF' not in text
 

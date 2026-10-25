@@ -17,6 +17,7 @@ def latex_escape(value):
 
 @dataclass
 class BreakpointData:
+    """Optional reporting context; report loaders return Datasets by default."""
     label: str
     dataset: xr.Dataset
     metadata: dict
@@ -80,17 +81,25 @@ class Report:
         safe_title = latex_escape(title)
         self._latex_content.append(f"\\subsection{{{safe_title}}}")
 
-    def load_input(self):
-        """Open the original input NetCDF, including all variables and metadata."""
+    def load_input(self, *, with_metadata: bool = False):
+        """Return the original input as an Xarray Dataset, preserving its attributes.
+
+        Use ``with_metadata=True`` only when the reporting wrapper is needed.
+        """
         metadata = self.manifest.get("input")
         if not metadata:
             raise ValueError("No input file was recorded in the manifest.")
-        return BreakpointData(
+        product = BreakpointData(
             label="Input", dataset=xr.open_dataset(metadata["file"]), metadata=metadata
         )
+        return product if with_metadata else product.dataset
 
-    def load_bkp(self, label: str):
-        """Loads a breakpoint's file and its manifest metadata, supporting shadow PA files."""
+    def load_bkp(self, label: str, *, with_metadata: bool = False):
+        """Return an Xarray Dataset for a breakpoint, final output or precision replay.
+
+        Use ``product['variable']`` and normal Xarray inspection and plotting.
+        ``with_metadata=True`` returns the optional label/metadata wrapper.
+        """
         # Find the breakpoint in the manifest
         bkp_meta = next((b for b in self.manifest.get("breakpoints", []) if b["label"] == label), None)
 
@@ -133,10 +142,35 @@ class Report:
         else:
             ds = xr.open_dataset(file_path)
             
-        return BreakpointData(label=label, dataset=ds, metadata=bkp_meta)
+        ds.encoding.setdefault("source", str(file_path.resolve()))
+        product = BreakpointData(label=label, dataset=ds, metadata=bkp_meta)
+        return product if with_metadata else ds
 
-    def plot_1d_images(self, bkp: BreakpointData, var_name: str, indexes: tuple):
+    def _as_breakpoint(self, product):
+        """Recover reporting context without changing a Dataset's attributes."""
+        if isinstance(product, BreakpointData):
+            return product
+        if not isinstance(product, xr.Dataset):
+            raise TypeError("Report products must be an xarray.Dataset or BreakpointData.")
+        source = product.encoding.get("source")
+        if source:
+            source = Path(source).resolve()
+            items = self.manifest.get("breakpoints", []).copy()
+            if self.manifest.get("final_output"):
+                items.append(self.manifest["final_output"])
+            if self.manifest.get("input"):
+                items.append({**self.manifest["input"], "label": "Input"})
+            for metadata in items:
+                path = self.output_root / metadata["file"]
+                if path.resolve() == source:
+                    return BreakpointData(metadata["label"], product, metadata)
+            # Reference-run and precision-replay files may belong to another manifest.
+            return BreakpointData(source.stem, product, {})
+        return BreakpointData("Dataset", product, {})
+
+    def plot_1d_images(self, bkp: xr.Dataset | BreakpointData, var_name: str, indexes: tuple):
         """Generates a 1D plot for a precisely specified variable."""
+        bkp = self._as_breakpoint(bkp)
         fig, ax = plt.subplots(figsize=(8, 4))
         
         data_array = bkp.dataset[var_name]
@@ -157,8 +191,9 @@ class Report:
         desc = f"1D visualization of variable {var_name} in breakpoint {bkp.label}. Execution time: {bkp.metadata.get('duration_sec')}s."
         self.plot(fig, desc)
 
-    def plot_2d_images(self, bkp: BreakpointData, var_name: str, indexes: tuple):
+    def plot_2d_images(self, bkp: xr.Dataset | BreakpointData, var_name: str, indexes: tuple):
         """Generates a 2D plot for a precisely specified variable."""
+        bkp = self._as_breakpoint(bkp)
         fig, ax = plt.subplots(figsize=(8, 6))
         
         data_array = bkp.dataset[var_name]
@@ -190,6 +225,8 @@ class Report:
         import numpy as np
         import matplotlib.pyplot as plt
 
+        bkp_nom = self._as_breakpoint(bkp_nom)
+        bkp_pa = self._as_breakpoint(bkp_pa)
         ds_nom = bkp_nom.dataset
         ds_pa = bkp_pa.dataset
         

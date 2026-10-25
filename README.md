@@ -155,9 +155,16 @@ jupyter lab outputs/report.ipynb
 python outputs/report.py --author 'Your Name'
 ```
 
-In notebooks, inspect `input_data.dataset` or `product_1.dataset`. To plot an
-image, select a DataArray and slice extra dimensions, for example
-`input_data.dataset['default_image'].isel(Channels=0).plot()`.
+`report.load_input()` and `report.load_bkp(label)` return ordinary
+`xarray.Dataset` objects. Inspect `product_1`, access variables with
+`product_1['default_image']`, and read scientific metadata with `.attrs`.
+To plot an image, slice extra dimensions first, for example
+`product_1['default_image'].isel(Channels=0).plot()`.
+Plotting and comparison helpers accept these Datasets directly. Run information
+remains in `report.manifest`; use `report.load_bkp(label, with_metadata=True)`
+only when you need the optional wrapper with `.label`, `.metadata` and `.dataset`.
+Older generated reports using `.dataset` should be regenerated, or their loader
+calls updated with `with_metadata=True`.
 Optional PDF export writes under `outputs/pdf/`. Source input and CCDB paths
 are recorded in the manifest; keep those files available when running reports.
 

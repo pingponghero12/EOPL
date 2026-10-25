@@ -54,8 +54,8 @@ def test_report_input_and_ccdb_sections(tmp_path, monkeypatch, with_input, with_
         assert source.index('report.section("Input NetCDF")') < source.index('# --- Custom Pipeline Reporting ---')
         report = Report(pipeline._output_root / 'run_manifest.yaml')
         loaded = report.load_input()
-        xr.testing.assert_identical(loaded.dataset, original)
-        loaded.dataset.close()
+        xr.testing.assert_identical(loaded, original)
+        loaded.close()
     else:
         assert 'input_data = report.load_input()' not in source
     # Execute the editable script from another directory, without requiring LaTeX.

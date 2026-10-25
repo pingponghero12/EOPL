@@ -883,13 +883,13 @@ report.add_property("Reference calibration parameters", reference_ccdb.keys())''
         if config.get("generate_input", True) and manifest.get("input"):
             code = '''report.section("Input NetCDF")
 input_data = report.load_input()
-report.add_property("Input variables", list(input_data.dataset.data_vars))
-report.add_property("Input dimensions", dict(input_data.dataset.sizes))'''
+report.add_property("Input variables", list(input_data.data_vars))
+report.add_property("Input dimensions", dict(input_data.sizes))'''
             if baseline is not None and baseline.get("input"):
                 code += f'''
 reference_input = reference.load_input()
 report.plot_run_comparison(reference_input, input_data, threshold={threshold!r})'''
-            sections.append(("Input NetCDF", code, "display(input_data.dataset)"))
+            sections.append(("Input NetCDF", code, "display(input_data)"))
         return sections
 
     def _generate_report_script(self, manifest_path: Path):
@@ -997,25 +997,25 @@ report.plot_run_comparison(reference_input, input_data, threshold={threshold!r})
                 
                 if is_input:
                     block_lines.extend([
-                        '    report.add_property("Dimensions", dict(input_data.dataset.sizes))',
-                        '    report.add_property("Global attributes", dict(input_data.dataset.attrs))',
+                        '    report.add_property("Dimensions", dict(input_data.sizes))',
+                        '    report.add_property("Global attributes", dict(input_data.attrs))',
                     ])
                     for var in ds.variables:
                         block_lines.extend([
-                            f'    report.add_property({(var + " dimensions / dtype")!r}, (input_data.dataset[{var!r}].dims, str(input_data.dataset[{var!r}].dtype)))',
-                            f'    report.add_property({(var + " attributes")!r}, dict(input_data.dataset[{var!r}].attrs))',
+                            f'    report.add_property({(var + " dimensions / dtype")!r}, (input_data[{var!r}].dims, str(input_data[{var!r}].dtype)))',
+                            f'    report.add_property({(var + " attributes")!r}, dict(input_data[{var!r}].attrs))',
                         ])
                         if var in ds.data_vars and ds[var].ndim > 0:
-                            block_lines.append(f'    report.add_property({var!r}, np.array2string(input_data.dataset[{var!r}].values, edgeitems=5, threshold=10))')
+                            block_lines.append(f'    report.add_property({var!r}, np.array2string(input_data[{var!r}].values, edgeitems=5, threshold=10))')
 
                 if print_all or is_input:
                     # -- Coordinates --
                     block_lines.append("    # Default Coordinate Systems")
                     if list(ds.coords):
                         for coord in ds.coords:
-                            block_lines.append(f'    report.add_property({coord!r}, np.array2string({var_name}.dataset[{coord!r}].values, edgeitems=5, threshold=10))')
+                            block_lines.append(f'    report.add_property({coord!r}, np.array2string({var_name}[{coord!r}].values, edgeitems=5, threshold=10))')
                     else:
-                        block_lines.append(f'    # report.add_property("Example_Coord", np.array2string({var_name}.dataset["example_coord"].values, edgeitems=5, threshold=10))')
+                        block_lines.append(f'    # report.add_property("Example_Coord", np.array2string({var_name}["example_coord"].values, edgeitems=5, threshold=10))')
                     block_lines.append("")
                     
                     # Inspect Variables
@@ -1031,9 +1031,9 @@ report.plot_run_comparison(reference_input, input_data, threshold={threshold!r})
                     block_lines.append("    # Default Dataset elements")
                     if scalars:
                         for var in scalars:
-                            block_lines.append(f'    report.add_property({var!r}, {var_name}.dataset[{var!r}].values)')
+                            block_lines.append(f'    report.add_property({var!r}, {var_name}[{var!r}].values)')
                     else:
-                        block_lines.append(f'    # report.add_property("Example_Scalar", {var_name}.dataset["example_scalar"].values)')
+                        block_lines.append(f'    # report.add_property("Example_Scalar", {var_name}["example_scalar"].values)')
                     block_lines.append("")
 
                     # -- 1D Datasets --
@@ -1061,7 +1061,7 @@ report.plot_run_comparison(reference_input, input_data, threshold={threshold!r})
                     # Keep scalar results visible without dumping coordinates or arrays.
                     for var in ds.data_vars:
                         if ds[var].ndim == 0:
-                            block_lines.append(f'    report.add_property({var!r}, {var_name}.dataset[{var!r}].values)')
+                            block_lines.append(f'    report.add_property({var!r}, {var_name}[{var!r}].values)')
                     arr_2d = [var for var in ds.data_vars
                               if ds[var].ndim >= 2 and ds[var].dtype.kind in "biuf"]
                     if arr_2d:
@@ -1073,15 +1073,15 @@ report.plot_run_comparison(reference_input, input_data, threshold={threshold!r})
                         block_lines.append("")
 
                 inspection = [
-                    f'display({var_name}.dataset)',
-                    f'# display({var_name}.dataset.attrs)',
-                    f'# display({var_name}.dataset.coords)',
+                    f'display({var_name})',
+                    f'# display({var_name}.attrs)',
+                    f'# display({var_name}.coords)',
                 ]
                 for var in ds.data_vars:
-                    inspection.append(f'# display({var_name}.dataset[{var!r}])')
+                    inspection.append(f'# display({var_name}[{var!r}])')
                     if ds[var].ndim > 0 and ds[var].dtype.kind in "biuf":
                         selection = {dim: 0 for dim in ds[var].dims[:-2]}
-                        array = f'{var_name}.dataset[{var!r}]'
+                        array = f'{var_name}[{var!r}]'
                         if selection:
                             array += f'.isel({selection!r})'
                         inspection.append(f'# {array}.plot()')
@@ -1197,8 +1197,8 @@ if __name__ == "__main__":
         title = "EOPL Run Comparison Report" if comparison else (
             "EOPL Precision Analysis Report" if precision else "EOPL Report")
         add_cell("markdown", f"# {title}\nRun cells from top to bottom. Uncomment inspection and plotting examples as needed.\n\n"
-                 "Selected products expose Xarray data through `.dataset`. "
-                 "Select a variable with `.dataset['variable']` and slice extra dimensions with `.isel(...)` before `.plot()`.")
+                 "Selected products are Xarray Datasets. "
+                 "Select a variable with `product['variable']` and slice extra dimensions with `.isel(...)` before `.plot()`.")
         comparison_setup = 'reference = Report(report.output_root.parent / "run_manifest.yaml")' if comparison else ""
         add_cell("code", f'''\
             from pathlib import Path
@@ -1292,8 +1292,8 @@ if __name__ == "__main__":
                 product_{i}_current = report.load_bkp({current["label"]!r})
                 report.plot_run_comparison(product_{i}_reference, product_{i}_current, threshold={threshold!r})
             '''
-            inspection = (f'display(product_{i}_reference.dataset)\n'
-                          f'display(product_{i}_current.dataset)')
+            inspection = (f'display(product_{i}_reference)\n'
+                          f'display(product_{i}_current)')
             sections.append(("Compare: " + current["label"], code, inspection))
         if config.get("generate_custom_analysis", True):
             sections.append(("Custom Analysis", self._custom_report_code(self.manifest) + "\n" + self._custom_analysis_example(), ""))
@@ -1438,10 +1438,10 @@ if __name__ == "__main__":
             sections.extend(context_sections)
             for i, (item, code) in enumerate(zip(items_to_process, bkp_blocks), 1):
                 title = ("Final Output: " if item.get("_is_final_output") else "Breakpoint: ") + item["label"]
-                inspection = (f'display(product_{i}_nom.dataset)\n'
-                              f'display(product_{i}_pa.dataset)\n'
-                              f'# display(product_{i}_nom.dataset.attrs)\n'
-                              f'# display(product_{i}_pa.dataset.attrs)')
+                inspection = (f'display(product_{i}_nom)\n'
+                              f'display(product_{i}_pa)\n'
+                              f'# display(product_{i}_nom.attrs)\n'
+                              f'# display(product_{i}_pa.attrs)')
                 sections.append((title, code, inspection))
             if report_config.get("generate_custom_analysis", True):
                 sections.append(("Custom Analysis", custom_code, ""))
