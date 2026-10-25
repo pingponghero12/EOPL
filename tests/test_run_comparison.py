@@ -14,12 +14,12 @@ from eopl.report import Report, BreakpointData
 
 @pytest.mark.parametrize('report_format', ['py', 'ipynb'])
 @pytest.mark.parametrize('file_type', ['nc', 'zarr'])
-def test_named_run_and_comparison_report(tmp_path, monkeypatch, report_format, file_type):
+def test_named_run_and_comparison_report(tmp_path, monkeypatch, report_format, file_type, full_report_params):
     monkeypatch.chdir(tmp_path)
     baseline = Pipeline()
     baseline.parse_arguments([])
     baseline.set_run_options(precision='float32')
-    baseline.generate_report(True, report_format=report_format)
+    baseline.generate_report(True, {**full_report_params, 'report_format': report_format})
     baseline.setup_precision_analysis()
     data = image_t(np.arange(1, 7, dtype=np.float32).reshape(2, 3), dims=('y', 'x'), name='image')
     baseline.save_bkp(data, 'after_gain', file_type=file_type)
@@ -29,7 +29,7 @@ def test_named_run_and_comparison_report(tmp_path, monkeypatch, report_format, f
     args = variant.parse_arguments(['--dir', 'doubled'])
     assert Path(args['output_root']) == Path('outputs') / 'doubled'
     variant.set_run_options(precision='float32')
-    variant.generate_report(True, report_format=report_format)
+    variant.generate_report(True, {**full_report_params, 'report_format': report_format})
     variant.setup_precision_analysis()
     changed = image_t(data.image() * 2, name='image')
     variant.save_bkp(changed, 'after_gain', file_type=file_type)

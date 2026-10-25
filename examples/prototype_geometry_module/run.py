@@ -1,6 +1,6 @@
 """Runnable demonstration using the EOPL interface."""
 
-from eopl.pipeline import Pipeline
+from eopl import Pipeline, default_report_params
 from algorithms.simulate_geometry import simulate_geometry
 
 pl = Pipeline()
@@ -10,8 +10,12 @@ args = pl.parse_arguments()
 pl.add_local_config(args["local_config_path"])
 pl.add_global_config(args["global_config_path"])
 pl.set_run_options(use_cuda=False, num_cores=4, precision="float64")
-# Change report_format to "ipynb" for a Jupyter notebook.
-pl.generate_report(True, report_format="py", print_all_bkp_data=True, plot_2d_indexes=(0,))
+
+# Defaults include only final output; uncomment any extra sections you need.
+report_params = default_report_params()
+report_params["report_format"] = "py"  # "py" or "ipynb"
+report_params["plot_2d_indexes"] = (0,)
+pl.generate_report(True, report_params)
 pl.generate_breakpoints(True)
 pl.setup_precision_analysis(precision="float64", threshold_mean_abs_diff=1e-7)
 

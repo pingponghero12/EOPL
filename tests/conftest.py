@@ -1,7 +1,17 @@
 import numpy as np
 import pytest
 
-from eopl import image_t
+from eopl import image_t, default_report_params
+
+
+@pytest.fixture
+def full_report_params():
+    params = default_report_params()
+    for name in params:
+        if name.startswith('generate_'):
+            params[name] = True
+    params['plot_1d_images'] = True
+    return params
 
 
 @pytest.fixture
