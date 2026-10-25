@@ -10,6 +10,7 @@ args = pl.parse_arguments()
 pl.add_local_config(args["local_config_path"])
 pl.add_global_config(args["global_config_path"])
 pl.set_run_options(use_cuda=False, num_cores=4, precision="float64")
+
 # Defaults include only final output; uncomment any extra sections you need.
 report_params = default_report_params()
 report_params["report_format"] = "py"  # "py" or "ipynb"
