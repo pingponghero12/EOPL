@@ -2,8 +2,8 @@
 import ctypes
 import numpy as np
 import xarray as xr
-from eopal.data import image_t
-from eopal.ops import block_mean_downsample
+from eopl import image_t
+from eopl.algorithms import block_mean_downsample
 from .native import kernel, double_array, DOUBLE_PTR, SIZE
 
 

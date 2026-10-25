@@ -6,7 +6,7 @@ import pytest
 import xarray as xr
 
 from eopl import image_t
-from eopl.ops.gain import apply_gain_1d, apply_gain_1d_cpp
+from eopl.algorithms.gain import apply_gain_1d, apply_gain_1d_cpp
 
 
 @pytest.mark.parametrize('dtype', ['float32', 'float64', 'uint32'])

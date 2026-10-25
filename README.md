@@ -1,9 +1,9 @@
 # EOPL
 
-Earth Observation Processing Library: orchestration for scientific pipelines,
+Earth Observation Processing Library: algorithms and orchestration for scientific pipelines,
 NetCDF/Zarr products, checkpoints, and editable Python or Jupyter reports.
 
-This is the first development release, version 0.1.0. The CPU workflows are
+Version 0.2.0 integrates the algorithms previously provided by EOPAL. The CPU workflows are
 covered by automated tests. CUDA code is retained, but GPU execution has not
 been validated for this release.
 
@@ -28,16 +28,27 @@ python -m pip install -e '.[test,notebook]' \
   -Ccmake.define.CMAKE_CUDA_COMPILER=NOTFOUND
 ```
 
-EOPL can run ordinary Python operations without EOPAL. The gain and straylight
-examples use EOPAL operations; install the sibling project separately:
-
-```bash
-python -m pip install -e ../EOPAL
-```
-
-EOPAL has its own installation requirements and license. A notebook frontend
+The algorithms and native gain core are included; no separate EOPAL installation
+is required. A notebook frontend
 must use the environment where EOPL is installed. PDF export additionally
 requires `pdflatex`; without it, the LaTeX source and figures are still saved.
+
+## Algorithms
+
+Reusable operations live in `eopl.algorithms`:
+
+```python
+from eopl.algorithms.gain import apply_gain_1d, apply_gain_1d_dask, apply_gain_1d_cpp
+from eopl.algorithms import block_mean_downsample, gaussian_psf, interpolate_spectra
+```
+
+The package also includes conservative spline upsampling, spectral-response
+convolution, simplex projection, projected and nonnegative linear unmixing,
+error metrics and spectral angle. Array operations accept NumPy or Xarray
+where documented; gain operates on EOPL's `image_t`. Functions declare their
+Dask and CUDA capabilities. The Python and Dask gain variants share Xarray's
+broadcasting implementation; the C++ variant uses the packaged native core.
+Existing `eopl.ops.gain` imports continue to work.
 
 ## Operation interface
 
@@ -83,7 +94,7 @@ python run.py
 
 The three examples are:
 
-- `gain_test_eopal`: Python and EOPAL C++ gain operations, CCDB interpolation,
+- `gain_test_eopal`: Python and packaged C++ gain operations, CCDB interpolation,
   checkpoints, and a commented multiplication-by-two comparison experiment.
 - `prototype_geometry_module`: a Python circular-orbit demonstration using
   `run_function` and pipeline-owned variables, without an image input.
@@ -92,10 +103,11 @@ The three examples are:
   `python setup_test_data.py` before its first execution.
 
 These algorithms demonstrate interfaces rather than validated mission physics.
-Python, Dask, and C++ variants are grouped per algorithm under `algorithms/`;
-geometry deliberately has only Python. For Dask, select the `_dask` functions
+Reusable algorithms are in `eopl.algorithms`; example-specific simulation
+models keep their Python, Dask, and C++ variants under the example's `algorithms/`.
+Geometry deliberately has only Python. For Dask, select the `_dask` functions
 and set `dask=True` on input and checkpoint calls. The local straylight C++
-example compiles its kernels with `c++` on Linux; EOPAL provides the gain core.
+example compiles its kernels with `c++` on Linux; EOPL provides the gain core.
 
 Scripts also accept the four ICD paths:
 
@@ -180,4 +192,4 @@ information is provided in [NOTICE](NOTICE).
 If you use EOPL in research, please cite the software using
 [CITATION.cff](CITATION.cff), also available through GitHub's **Cite this
 repository** button. Academic citation is requested, not required by the
-Apache-2.0 license. EOPAL and other dependencies retain their own licenses.
+Apache-2.0 license. Third-party dependencies retain their own licenses.

@@ -174,9 +174,7 @@ def test_cuda_cache_moves_only_when_freshness_changes(monkeypatch, make_eopl_ima
         def free_vram(pointer):
             calls["free"].append(pointer)
 
-    package = types.ModuleType("eopal")
-    package.eopal_cpp_core = Core
-    monkeypatch.setitem(sys.modules, "eopal", package)
+    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", Core, raising=False)
 
     pipeline = Pipeline()
     pipeline.set_run_options(use_cuda=True)
@@ -226,9 +224,7 @@ def test_cuda_tuple_inputs_are_cached_independently(monkeypatch, make_eopl_image
         def free_vram(pointer):
             pass
 
-    package = types.ModuleType("eopal")
-    package.eopal_cpp_core = Core
-    monkeypatch.setitem(sys.modules, "eopal", package)
+    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", Core, raising=False)
     pipeline = Pipeline()
     pipeline.set_run_options(use_cuda=True)
     first, second = make_eopl_image(name="first"), make_eopl_image(name="second")
@@ -257,9 +253,7 @@ def test_read_only_cpu_operation_keeps_current_device_cache(monkeypatch, make_eo
         def free_vram(pointer):
             pass
 
-    package = types.ModuleType("eopal")
-    package.eopal_cpp_core = Core
-    monkeypatch.setitem(sys.modules, "eopal", package)
+    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", Core, raising=False)
     image = make_eopl_image()
     image._device_array = 55
     image._device_shape = image.image().shape
@@ -278,9 +272,8 @@ def test_read_only_cpu_operation_keeps_current_device_cache(monkeypatch, make_eo
 
 
 def test_cuda_build_and_layout_preconditions(monkeypatch, make_eopl_image):
-    package = types.ModuleType("eopal")
-    package.eopal_cpp_core = types.SimpleNamespace(HAS_CUDA_COMPILED=False)
-    monkeypatch.setitem(sys.modules, "eopal", package)
+    core = types.SimpleNamespace(HAS_CUDA_COMPILED=False)
+    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", core, raising=False)
     pipeline = Pipeline()
     pipeline.set_run_options(use_cuda=True)
 
@@ -291,7 +284,7 @@ def test_cuda_build_and_layout_preconditions(monkeypatch, make_eopl_image):
     with pytest.raises(RuntimeError, match="without CUDA"):
         pipeline.run_operation(make_eopl_image(), operation)
 
-    package.eopal_cpp_core.HAS_CUDA_COMPILED = True
+    core.HAS_CUDA_COMPILED = True
     with pytest.raises(TypeError, match="supports CUDA dtypes"):
         pipeline.run_operation(make_eopl_image(dtype=np.uint32), operation)
     with pytest.raises(ValueError, match="3-D"):
@@ -315,9 +308,7 @@ def test_failed_cuda_write_releases_uncertain_device_copy(monkeypatch, make_eopl
         def free_vram(pointer):
             freed.append(pointer)
 
-    package = types.ModuleType("eopal")
-    package.eopal_cpp_core = Core
-    monkeypatch.setitem(sys.modules, "eopal", package)
+    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", Core, raising=False)
     pipeline = Pipeline()
     pipeline.set_run_options(use_cuda=True)
     image = make_eopl_image()

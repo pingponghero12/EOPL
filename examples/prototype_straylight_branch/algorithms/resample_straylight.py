@@ -2,7 +2,7 @@
 import ctypes
 import numpy as np
 import xarray as xr
-from eopal.data import image_t
+from eopl import image_t
 from .native import kernel, double_array, DOUBLE_PTR, SIZE
 
 

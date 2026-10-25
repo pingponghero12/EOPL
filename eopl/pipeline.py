@@ -39,7 +39,7 @@ class Pipeline:
         self.ccdb = None
         self.rng = None
         self.manifest = {
-            "eopl_version": "0.1.0",
+            "eopl_version": "0.2.0",
             "operations": [],
             "breakpoints": [],
             "intermediates": [],
@@ -169,22 +169,22 @@ class Pipeline:
 
     def _ensure_vram(self, data: image_t):
         """Make the device copy current, transferring only when it is stale or absent."""
-        from eopal import eopal_cpp_core
+        from eopl import eopl_cpp_core
 
-        if not getattr(eopal_cpp_core, "HAS_CUDA_COMPILED", False):
-            raise RuntimeError("EOPAL was built without CUDA support.")
+        if not getattr(eopl_cpp_core, "HAS_CUDA_COMPILED", False):
+            raise RuntimeError("EOPL was built without CUDA support.")
 
         image = data.image().values
         if image.dtype != np.float32:
             raise TypeError(
-                f"The current EOPAL CUDA backend requires float32 image data, got {image.dtype}."
+                f"The current EOPL CUDA backend requires float32 image data, got {image.dtype}."
             )
         if image.ndim != 3:
             raise ValueError(
-                f"The current EOPAL CUDA backend requires a 3-D image, got {image.ndim}-D."
+                f"The current EOPL CUDA backend requires a 3-D image, got {image.ndim}-D."
             )
         if not image.flags.c_contiguous:
-            raise ValueError("The current EOPAL CUDA backend requires C-contiguous image data.")
+            raise ValueError("The current EOPL CUDA backend requires C-contiguous image data.")
 
         layout = (tuple(image.shape), image.dtype.str, image.nbytes)
         allocated_layout = (data._device_shape, data._device_dtype, data._device_nbytes)
@@ -199,12 +199,12 @@ class Pipeline:
 
         if data._device_array is None:
             self.log.debug("Allocating VRAM and copying the current host image.")
-            data._device_array = eopal_cpp_core.push_to_vram_numpy(image, 0)
+            data._device_array = eopl_cpp_core.push_to_vram_numpy(image, 0)
             data._device_shape, data._device_dtype, data._device_nbytes = layout
             data.mark_synchronized()
         elif data._device_dirty:
             self.log.debug("Refreshing stale VRAM from the current host image.")
-            data._device_array = eopal_cpp_core.push_to_vram_numpy(
+            data._device_array = eopl_cpp_core.push_to_vram_numpy(
                 image, data._device_array
             )
             data.mark_synchronized()
@@ -726,9 +726,9 @@ class Pipeline:
             return None
 
         if data._device_array is not None and data._host_dirty:
-            from eopal import eopal_cpp_core
+            from eopl import eopl_cpp_core
 
-            eopal_cpp_core.copy_to_host_numpy(
+            eopl_cpp_core.copy_to_host_numpy(
                 data.image().values,
                 data._device_array,
             )

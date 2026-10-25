@@ -92,8 +92,8 @@ class image_t:
         if pointer is None:
             return
         self.clear_device_state()
-        from eopal import eopal_cpp_core
-        eopal_cpp_core.free_vram(pointer)
+        from eopl import eopl_cpp_core
+        eopl_cpp_core.free_vram(pointer)
 
     def close(self) -> None:
         self.release_device()

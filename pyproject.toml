@@ -7,8 +7,8 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "eopl"
-version = "0.1.0"
-description = "Earth observation pipeline orchestration, data products, and reproducible reports"
+version = "0.2.0"
+description = "Earth observation processing algorithms, pipelines, data products, and reproducible reports"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
