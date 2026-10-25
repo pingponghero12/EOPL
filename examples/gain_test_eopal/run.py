@@ -1,5 +1,5 @@
 import numpy as np
-from eopl.pipeline import Pipeline
+from eopl import Pipeline, default_report_params
 from eopl import utils
 
 # Python, Dask, and C++ implementations
@@ -26,8 +26,17 @@ pl.set_run_options(use_cuda=False, num_cores=4, precision="float32")
 pl.set_image_type("float32")
 
 # We use (0,) to slice only the first dimension ('channels'), leaving ALT and ACT for 2D plotting
-# Change report_format to "ipynb" for a Jupyter notebook.
-pl.generate_report(True, report_format="ipynb", print_all_bkp_data=True, plot_2d_images=True, plot_2d_indexes=(0,))
+# Defaults include only final output; uncomment any extra sections you need.
+report_params = default_report_params()
+report_params["report_format"] = "ipynb"  # "py" or "ipynb"
+report_params["plot_2d_indexes"] = (0,)
+# report_params["generate_metadata"] = True
+# report_params["generate_ccdb"] = True
+# report_params["generate_input"] = True
+# report_params["generate_breakpoints"] = True
+# report_params["generate_custom_analysis"] = True
+# report_params["generate_final"] = False  # Disable final output if needed.
+pl.generate_report(True, report_params)
 pl.generate_breakpoints(True)
 pl.setup_precision_analysis(precision="float64", threshold_mean_abs_diff=1e-7)
 

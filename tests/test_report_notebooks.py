@@ -10,7 +10,7 @@ from eopl import Pipeline
 
 
 @pytest.mark.parametrize('with_input', [True, False])
-def test_notebook_sections_and_precision_replay(tmp_path, with_input):
+def test_notebook_sections_and_precision_replay(tmp_path, with_input, full_report_params):
     source = tmp_path / 'input.nc'
     xr.Dataset({'image': (('Channels', 'ALT', 'ACT'), np.ones((2, 3, 4)))}).to_netcdf(source)
     calibration = tmp_path / 'ccdb'
@@ -23,7 +23,7 @@ def test_notebook_sections_and_precision_replay(tmp_path, with_input):
         pipeline._output_root = tmp_path / 'output'
         pipeline._is_pa_run = precision_run
         pipeline.set_run_options(precision='float32')
-        pipeline.generate_report(True, report_format='ipynb', print_all_bkp_data=True)
+        pipeline.generate_report(True, {**full_report_params, 'report_format': 'ipynb', 'print_all_bkp_data': True})
         pipeline.setup_precision_analysis()
         pipeline.add_ccdb(calibration)
         pipeline.report_print('Mission analysis')
@@ -68,4 +68,4 @@ def test_report_format_validation_and_default():
     pipeline.generate_report(True)
     assert pipeline.manifest['report_config']['report_format'] == 'py'
     with pytest.raises(ValueError, match='report_format'):
-        pipeline.generate_report(True, report_format='pdf')
+        pipeline.generate_report(True, {'report_format': 'pdf'})

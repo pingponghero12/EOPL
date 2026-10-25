@@ -18,6 +18,7 @@ from .data import image_t
 from .exceptions import ShapeError
 from .ccdb import CCDB
 from .log import Log
+from .report_config import ReportParams, default_report_params
 
 
 @dataclass
@@ -347,22 +348,25 @@ class Pipeline:
         self.run_options.precision = forced_precision
         self.manifest["precision"] = forced_precision
 
-    def generate_report(self, enabled: bool, print_all_bkp_data: bool = False, 
-                        plot_1d_images: bool = True, plot_1d_indexes: tuple = (0,),
-                        plot_2d_images: bool = True, plot_2d_indexes: tuple = (0, 0, 0),
-                        report_format: str = "py"):
-        """Generate an editable Python script or a Jupyter notebook (ipynb)."""
-        if report_format not in ("py", "ipynb"):
+    def generate_report(self, enabled: bool, params: ReportParams | None = None):
+        """Configure ordinary and comparison reports; default to final output only."""
+        config = default_report_params()
+        if params is not None:
+            if not isinstance(params, dict):
+                raise TypeError("Report params must be a dictionary.")
+            unknown = params.keys() - config.keys()
+            if unknown:
+                raise ValueError(f"Unknown report parameters: {sorted(unknown)}")
+            config.update(params)
+        if config["report_format"] not in ("py", "ipynb"):
             raise ValueError("report_format must be 'py' or 'ipynb'.")
-        self.manifest["report_config"] = {
-            "enabled": enabled,
-            "report_format": report_format,
-            "print_all_bkp_data": print_all_bkp_data,
-            "plot_1d_images": plot_1d_images,
-            "plot_1d_indexes": list(plot_1d_indexes),
-            "plot_2d_images": plot_2d_images,
-            "plot_2d_indexes": list(plot_2d_indexes)
-        }
+        for name, value in config.items():
+            if (name.startswith("generate_") or name in (
+                    "print_all_bkp_data", "plot_1d_images", "plot_2d_images")) and not isinstance(value, bool):
+                raise TypeError(f"{name} must be a boolean.")
+        config["plot_1d_indexes"] = list(config["plot_1d_indexes"])
+        config["plot_2d_indexes"] = list(config["plot_2d_indexes"])
+        self.manifest["report_config"] = {"enabled": enabled, **config}
 
     def generate_breakpoints(self, enabled: bool):
         self._generate_breakpoints = enabled
@@ -818,26 +822,10 @@ class Pipeline:
         """
         self.manifest["custom_report_blocks"].append({"type": "code", "content": code_string})
 
-    def _generate_report_script(self, manifest_path: Path):
-        """Dynamically inspects data on disk and generates the runnable report.py script."""
-        import xarray as xr
-        script_path = self._output_root / "report.py"
-        
-        pa_enabled = self.manifest.get("precision_analysis", {}).get("enabled", False)
-        report_config = self.manifest.get("report_config", {})
-        
-        if not report_config.get("enabled", False):
-            return 
-            
-        print_all = report_config.get("print_all_bkp_data", False)
-        plot_1d = report_config.get("plot_1d_images", True)
-        indexes_1d = tuple(report_config.get("plot_1d_indexes", (0,)))
-        plot_2d = report_config.get("plot_2d_images", True)
-        indexes_2d = tuple(report_config.get("plot_2d_indexes", (0,0,0)))
-        
-
+    @staticmethod
+    def _custom_report_code(manifest):
         custom_blocks_code = []
-        for block in self.manifest.get("custom_report_blocks", []):
+        for block in manifest.get("custom_report_blocks", []):
             b_type = block.get("type")
             if b_type == "section":
                 safe_title = repr(block["content"])
@@ -858,14 +846,81 @@ class Pipeline:
                 indented = "\n".join([f"    {line}" for line in block['content'].split("\n")])
                 custom_blocks_code.append(indented)
                 
-        custom_injection_string = "\n".join(custom_blocks_code)
+        return "\n".join(custom_blocks_code)
+
+    @staticmethod
+    def _report_metadata_code():
+        return '''    report.section("Run Metadata")
+    report.hardware_target(report.manifest.get("hardware_target", "Unknown"))
+    report.execution_time_sec(report.manifest.get("total_execution_time_sec", 0.0))
+    report.add_property("Precision", report.manifest.get("precision", "Unknown"))
+    report.add_property("Number of Cores", report.manifest.get("num_cores", 1))'''
+
+    @staticmethod
+    def _custom_analysis_example():
+        return '''    # Custom Analysis Example
+    report.section("Custom Analysis")
+    # report.print("Custom Analysis")
+    # fig, ax = plt.subplots(figsize=(8, 6))
+    # ax.plot([1, 2, 3], [1, 2, 3])
+    # report.plot(fig, "Example custom figure description.")'''
+
+    @staticmethod
+    def _report_context_sections(config, manifest, baseline=None, threshold=1e-7):
+        """Optional calibration and input context for comparison reports."""
+        sections = []
+        if config.get("generate_ccdb", True) and manifest.get("ccdb"):
+            code = '''report.section("CCDB")
+ccdb = CCDB(report.manifest["ccdb"]["directory"])
+report.add_property("Calibration parameters", ccdb.keys())
+# value = ccdb.get("parameter_name")
+# report.add_property("Calibration value", value)'''
+            if baseline is not None and baseline.get("ccdb"):
+                code += '''
+reference_ccdb = CCDB(reference.manifest["ccdb"]["directory"])
+report.add_property("Reference calibration parameters", reference_ccdb.keys())'''
+            sections.append(("CCDB", code, "display(ccdb.keys())"))
+        if config.get("generate_input", True) and manifest.get("input"):
+            code = '''report.section("Input NetCDF")
+input_data = report.load_input()
+report.add_property("Input variables", list(input_data.dataset.data_vars))
+report.add_property("Input dimensions", dict(input_data.dataset.sizes))'''
+            if baseline is not None and baseline.get("input"):
+                code += f'''
+reference_input = reference.load_input()
+report.plot_run_comparison(reference_input, input_data, threshold={threshold!r})'''
+            sections.append(("Input NetCDF", code, "display(input_data.dataset)"))
+        return sections
+
+    def _generate_report_script(self, manifest_path: Path):
+        """Dynamically inspects data on disk and generates the runnable report.py script."""
+        import xarray as xr
+        script_path = self._output_root / "report.py"
+
+        pa_enabled = self.manifest.get("precision_analysis", {}).get("enabled", False)
+        report_config = self.manifest.get("report_config", {})
+
+        if not report_config.get("enabled", False):
+            return
+
+        print_all = report_config.get("print_all_bkp_data", False)
+        plot_1d = report_config.get("plot_1d_images", True)
+        indexes_1d = tuple(report_config.get("plot_1d_indexes", (0,)))
+        plot_2d = report_config.get("plot_2d_images", True)
+        indexes_2d = tuple(report_config.get("plot_2d_indexes", (0,0,0)))
+
+
+        custom_injection_string = ""
+        if report_config.get("generate_custom_analysis", True):
+            custom_injection_string = '    # --- Custom Pipeline Reporting ---\n' + self._custom_report_code(self.manifest)
 
         ccdb_lines = [
             '    # --- CCDB ---',
-            '    # report.section("CCDB")',
+            '    report.section("CCDB")',
         ]
-        if self.ccdb is not None:
+        if report_config.get("generate_ccdb", True) and self.ccdb is not None:
             ccdb_lines.append('    ccdb = CCDB(report.manifest["ccdb"]["directory"])')
+            ccdb_lines.append('    report.add_property("Calibration parameters", ccdb.keys())')
             names = self.ccdb.keys()
             ccdb_lines.append('    # Available calibration parameters:')
             ccdb_lines.extend(f'    # ccdb.get({name!r})' for name in names)
@@ -890,14 +945,14 @@ class Pipeline:
             '    # fig.colorbar(im, ax=ax)',
             '    # report.plot(fig, "CCDB 2D calibration")',
         ])
-        ccdb_injection_string = "\n".join(ccdb_lines)
+        ccdb_injection_string = "\n".join(ccdb_lines) if report_config.get("generate_ccdb", True) else ""
 
-        items_to_process = self.manifest.get("breakpoints", []).copy()
-        if "final_output" in self.manifest:
+        items_to_process = self.manifest.get("breakpoints", []).copy() if report_config.get("generate_breakpoints", True) else []
+        if report_config.get("generate_final", True) and "final_output" in self.manifest:
             fo = self.manifest["final_output"].copy()
             fo["_is_final_output"] = True
             items_to_process.append(fo)
-        if "input" in self.manifest:
+        if report_config.get("generate_input", True) and "input" in self.manifest:
             items_to_process.insert(0, {
                 **self.manifest["input"], "label": "Input", "_is_input": True
             })
@@ -905,7 +960,7 @@ class Pipeline:
         input_block = ""
         bkp_blocks = []
         notebook_products = []
-        first_index = 0 if "input" in self.manifest else 1
+        first_index = 0 if items_to_process and items_to_process[0].get("_is_input") else 1
         for i, bkp in enumerate(items_to_process, first_index):
             label = bkp['label']
             is_final = bkp.get("_is_final_output", False)
@@ -1003,7 +1058,10 @@ class Pipeline:
                         block_lines.append(f'        # report.plot_2d_images({var_name}, "example_2d_var", plot_2d_indexes)')
                     block_lines.append("")
                 else:
-                    # Legacy fallback logic if print_all is false: just plot 2d objects
+                    # Keep scalar results visible without dumping coordinates or arrays.
+                    for var in ds.data_vars:
+                        if ds[var].ndim == 0:
+                            block_lines.append(f'    report.add_property({var!r}, {var_name}.dataset[{var!r}].values)')
                     arr_2d = [var for var in ds.data_vars
                               if ds[var].ndim >= 2 and ds[var].dtype.kind in "biuf"]
                     if arr_2d:
@@ -1044,6 +1102,9 @@ class Pipeline:
             else:
                 bkp_blocks.append("\n".join(block_lines))
 
+        metadata_code = self._report_metadata_code() if report_config.get("generate_metadata", True) else ""
+        custom_analysis_code = self._custom_analysis_example() if report_config.get("generate_custom_analysis", True) else ""
+
         script_content = f"""# AUTOMATICALLY GENERATED EOPL REPORT SCRIPT
 import eopl.report
 from eopl.ccdb import CCDB
@@ -1072,28 +1133,17 @@ def main():
     author = parse_args()
     report.author(author)
 
-    report.section("Run Metadata")
-    report.hardware_target(report.manifest.get("hardware_target", "Unknown"))
-    report.execution_time_sec(report.manifest.get("total_execution_time_sec", 0.0))
-    report.add_property("Precision", report.manifest.get("precision", "Unknown"))
-    report.add_property("Number of Cores", report.manifest.get("num_cores", 1))
     report.show_plots(False)
+{metadata_code}
 
 {ccdb_injection_string}
 
 {input_block}
 
-    # --- Custom Pipeline Reporting ---
 {custom_injection_string}
-    # ---------------------------------
 
 {chr(10).join(bkp_blocks)}
-    # Custom Analysis Example
-    report.section("Custom Analysis")
-    # report.print("Custom Analysis")
-    # fig, ax = plt.subplots(figsize=(8, 6))
-    # ax.plot([1, 2, 3], [1, 2, 3])
-    # report.plot(fig, "Example custom figure description.")
+{custom_analysis_code}
 
     report.report_save_pdf("mission_report.pdf")
 
@@ -1101,8 +1151,10 @@ if __name__ == "__main__":
     main()
 """
         if report_config.get("report_format", "py") == "ipynb":
-            sections = [("CCDB", ccdb_injection_string, "")]
-            if self.ccdb is not None:
+            sections = []
+            if report_config.get("generate_ccdb", True):
+                sections.append(("CCDB", ccdb_injection_string, ""))
+            if report_config.get("generate_ccdb", True) and self.ccdb is not None:
                 sections[0] = ("CCDB", ccdb_injection_string,
                                'display(ccdb.keys())\n'
                                f'# calibration = ccdb.get({example_name!r})\n'
@@ -1117,9 +1169,12 @@ if __name__ == "__main__":
                     custom_display.append(f'display(Markdown({(prefix + block["content"])!r}))')
                 elif block["type"] == "property":
                     custom_display.append(f'display({{ {block["name"]!r}: {block["value"]!r} }})')
-            sections.append(("Custom Pipeline Reporting", custom_injection_string,
-                             "\n".join(custom_display)))
+            if report_config.get("generate_custom_analysis", True):
+                sections.append(("Custom Pipeline Reporting", custom_injection_string,
+                                 "\n".join(custom_display)))
             sections.extend(section for section in notebook_products if section[0] != "Input NetCDF")
+            if report_config.get("generate_custom_analysis", True):
+                sections.append(("Custom Analysis", custom_analysis_code, ""))
             self._write_report_notebook(manifest_path, report_config, sections)
             return
         with open(script_path, "w") as f:
@@ -1142,8 +1197,9 @@ if __name__ == "__main__":
         title = "EOPL Run Comparison Report" if comparison else (
             "EOPL Precision Analysis Report" if precision else "EOPL Report")
         add_cell("markdown", f"# {title}\nRun cells from top to bottom. Uncomment inspection and plotting examples as needed.\n\n"
-                 "Products are report wrappers: use `input_data.dataset` or `product_1.dataset` to inspect xarray data. "
+                 "Selected products expose Xarray data through `.dataset`. "
                  "Select a variable with `.dataset['variable']` and slice extra dimensions with `.isel(...)` before `.plot()`.")
+        comparison_setup = 'reference = Report(report.output_root.parent / "run_manifest.yaml")' if comparison else ""
         add_cell("code", f'''\
             from pathlib import Path
             import numpy as np
@@ -1159,22 +1215,24 @@ if __name__ == "__main__":
             report = Report(MANIFEST_PATH)
             report.author("Your Name")
             report.show_plots(True)
+            {comparison_setup}
             plot_1d_images = {config.get("plot_1d_images", True)!r}
             plot_1d_indexes = {tuple(config.get("plot_1d_indexes", (0,)))!r}
             plot_2d_images = {config.get("plot_2d_images", True)!r}
             plot_2d_indexes = {tuple(config.get("plot_2d_indexes", (0, 0, 0)))!r}
             precision_analysis_enabled = {self.manifest.get("precision_analysis", {}).get("enabled", False)!r}
         ''')
-        add_cell("markdown", "## Run Metadata")
-        add_cell("code", '''\
-            report.section("Run Metadata")
-            report.hardware_target(report.manifest.get("hardware_target", "Unknown"))
-            report.execution_time_sec(report.manifest.get("total_execution_time_sec", 0.0))
-            report.add_property("Precision", report.manifest.get("precision", "Unknown"))
-            report.add_property("Number of Cores", report.manifest.get("num_cores", 1))
-            display({key: report.manifest.get(key) for key in
-                     ("hardware_target", "precision", "num_cores", "total_execution_time_sec")})
-        ''')
+        if config.get("generate_metadata", True):
+            add_cell("markdown", "## Run Metadata")
+            add_cell("code", '''\
+                report.section("Run Metadata")
+                report.hardware_target(report.manifest.get("hardware_target", "Unknown"))
+                report.execution_time_sec(report.manifest.get("total_execution_time_sec", 0.0))
+                report.add_property("Precision", report.manifest.get("precision", "Unknown"))
+                report.add_property("Number of Cores", report.manifest.get("num_cores", 1))
+                display({key: report.manifest.get(key) for key in
+                         ("hardware_target", "precision", "num_cores", "total_execution_time_sec")})
+            ''')
         for title, code, inspection in sections:
             add_cell("markdown", "## " + title)
             if code.strip():
@@ -1206,11 +1264,12 @@ if __name__ == "__main__":
         current_breakpoints = {item["label"]: item for item in self.manifest.get("breakpoints", [])}
         pairs = [(item, current_breakpoints[label]) for label, item in reference_breakpoints.items()
                  if label in current_breakpoints]
-        if "final_output" in baseline and "final_output" in self.manifest:
+        if not config.get("generate_breakpoints", True):
+            pairs = []
+        if config.get("generate_final", True) and "final_output" in baseline and "final_output" in self.manifest:
             pairs.append((baseline["final_output"], self.manifest["final_output"]))
         threshold = self.manifest.get("precision_analysis", {}).get("threshold_mean_abs_diff", 1e-7)
         metadata_code = f'''\
-            reference = Report(report.output_root.parent / "run_manifest.yaml")
             report.section("Run Comparison Metadata")
             report.add_property("Reference directory", str(reference.output_root))
             report.add_property("Current run", {self.manifest["comparison"]["name"]!r})
@@ -1220,7 +1279,12 @@ if __name__ == "__main__":
             report.add_property("Reference-only breakpoints", {sorted(reference_breakpoints.keys() - current_breakpoints.keys())!r})
             report.add_property("Current-only breakpoints", {sorted(current_breakpoints.keys() - reference_breakpoints.keys())!r})
         '''
-        sections = [("Run Comparison Metadata", metadata_code, 'display(reference.manifest)\ndisplay(report.manifest)')]
+        sections = []
+        if config.get("generate_metadata", True):
+            sections.append(("Run Comparison Metadata", metadata_code,
+                             'display({"reference_precision": reference.manifest.get("precision"), '
+                             '"current_precision": report.manifest.get("precision")})'))
+        sections.extend(self._report_context_sections(config, self.manifest, baseline, threshold))
         for i, (original, current) in enumerate(pairs, 1):
             code = f'''\
                 report.section({("Compare: " + current["label"])!r})
@@ -1231,6 +1295,8 @@ if __name__ == "__main__":
             inspection = (f'display(product_{i}_reference.dataset)\n'
                           f'display(product_{i}_current.dataset)')
             sections.append(("Compare: " + current["label"], code, inspection))
+        if config.get("generate_custom_analysis", True):
+            sections.append(("Custom Analysis", self._custom_report_code(self.manifest) + "\n" + self._custom_analysis_example(), ""))
         if config.get("report_format", "py") == "ipynb":
             self._write_report_notebook(manifest_path, config, sections,
                                         filename="report_comparison.ipynb", comparison=True)
@@ -1241,6 +1307,9 @@ if __name__ == "__main__":
 import argparse
 from pathlib import Path
 from eopl.report import Report
+from eopl.ccdb import CCDB
+import numpy as np
+import matplotlib.pyplot as plt
 
 MANIFEST_PATH = Path(__file__).with_name({manifest_path.name!r})
 
@@ -1250,6 +1319,7 @@ def main():
     report = Report(MANIFEST_PATH)
     report.author(parser.parse_args().author)
     report.show_plots(False)
+    reference = Report(report.output_root.parent / "run_manifest.yaml")
 
 {blocks}
 
@@ -1278,8 +1348,9 @@ if __name__ == "__main__":
         threshold = pa_config.get("threshold_mean_abs_diff", 1e-7)
         target_precision = pa_config.get("comparison_precision", "float64")
 
-        items_to_process = nominal_manifest.get("breakpoints", []).copy()
-        if "final_output" in nominal_manifest:
+        report_config = self.manifest["report_config"]
+        items_to_process = nominal_manifest.get("breakpoints", []).copy() if report_config.get("generate_breakpoints", True) else []
+        if report_config.get("generate_final", True) and "final_output" in nominal_manifest:
             fo = nominal_manifest["final_output"].copy()
             fo["_is_final_output"] = True
             items_to_process.append(fo)
@@ -1314,7 +1385,20 @@ if __name__ == "__main__":
             ])
             bkp_blocks.append("\n".join(block_lines))
 
+        metadata_code = f'''    report.section("Precision Analysis Metadata")
+    report.add_property("Nominal Precision", report.manifest.get("precision", "Unknown"))
+    report.add_property("Comparison Target", {target_precision!r})
+    report.add_property("Flag Threshold", {threshold!r})''' if report_config.get("generate_metadata", True) else ""
+        context_sections = self._report_context_sections(report_config, nominal_manifest)
+        context_code = "\n\n".join(textwrap.indent(textwrap.dedent(code).strip(), "    ")
+                                       for _, code, _ in context_sections)
+        custom_code = (self._custom_report_code(nominal_manifest) + "\n" + self._custom_analysis_example()
+                       if report_config.get("generate_custom_analysis", True) else "")
+
         script_content = f"""# AUTOMATICALLY GENERATED EOPL PRECISION ANALYSIS REPORT
+from eopl.ccdb import CCDB
+import numpy as np
+import matplotlib.pyplot as plt
 import eopl.report
 import argparse
 from pathlib import Path
@@ -1333,27 +1417,25 @@ def main():
     author = parse_args()
     report.author(author)
 
-    report.section("Precision Analysis Metadata")
-    report.add_property("Nominal Precision", report.manifest.get("precision", "Unknown"))
-    report.add_property("Comparison Target", "{target_precision}")
-    report.add_property("Flag Threshold", {threshold})
     report.show_plots(False)
+{metadata_code}
+
+{context_code}
 
 {chr(10).join(bkp_blocks)}
+
+{custom_code}
 
     report.report_save_pdf("precision_analysis_report.pdf")
 
 if __name__ == "__main__":
     main()
 """
-        report_config = nominal_manifest.get("report_config", {})
         if report_config.get("report_format", "py") == "ipynb":
-            sections = [("Precision Analysis Metadata", f'''\
-                report.section("Precision Analysis Metadata")
-                report.add_property("Comparison Target", {target_precision!r})
-                report.add_property("Flag Threshold", {threshold!r})
-                display({{"comparison_precision": {target_precision!r}, "threshold": {threshold!r}}})
-            ''', "")]
+            sections = []
+            if report_config.get("generate_metadata", True):
+                sections.append(("Precision Analysis Metadata", metadata_code, ""))
+            sections.extend(context_sections)
             for i, (item, code) in enumerate(zip(items_to_process, bkp_blocks), 1):
                 title = ("Final Output: " if item.get("_is_final_output") else "Breakpoint: ") + item["label"]
                 inspection = (f'display(product_{i}_nom.dataset)\n'
@@ -1361,6 +1443,8 @@ if __name__ == "__main__":
                               f'# display(product_{i}_nom.dataset.attrs)\n'
                               f'# display(product_{i}_pa.dataset.attrs)')
                 sections.append((title, code, inspection))
+            if report_config.get("generate_custom_analysis", True):
+                sections.append(("Custom Analysis", custom_code, ""))
             self._write_report_notebook(manifest_path, report_config, sections,
                                         filename="report_pa.ipynb", precision=True)
             return

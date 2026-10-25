@@ -12,11 +12,11 @@ from eopl.report import Report
 
 @pytest.mark.parametrize('with_input', [True, False])
 @pytest.mark.parametrize('with_ccdb', [True, False])
-def test_report_input_and_ccdb_sections(tmp_path, monkeypatch, with_input, with_ccdb):
+def test_report_input_and_ccdb_sections(tmp_path, monkeypatch, with_input, with_ccdb, full_report_params):
     monkeypatch.chdir(tmp_path)
     pipeline = Pipeline()
     pipeline._output_root = tmp_path / 'outputs'
-    pipeline.generate_report(True, print_all_bkp_data=False)
+    pipeline.generate_report(True, full_report_params)
     pipeline.report_section('Custom section')
     if with_input:
         original = xr.Dataset({

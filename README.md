@@ -120,15 +120,35 @@ CCDBs remain in their respective example directories.
 
 ## Reports and run comparison
 
-Choose the generated format in `run.py`:
+Choose report sections and format together in `run.py`:
 
 ```python
-pl.generate_report(True, report_format='ipynb', print_all_bkp_data=True)
+from eopl import default_report_params
+
+params = default_report_params()  # Final output only, with 2D plots.
+params['report_format'] = 'ipynb'  # 'py' or 'ipynb'
+params['generate_metadata'] = True
+# params['generate_ccdb'] = True
+# params['generate_input'] = True
+# params['generate_breakpoints'] = True
+# params['generate_custom_analysis'] = True
+# params['generate_final'] = False
+pl.generate_report(True, params)
 ```
 
 `report_format='py'` generates an editable `report.py`; `'ipynb'` generates
-`report.ipynb`. Reports include metadata, optional CCDB examples, the original
-input, breakpoints, and final products. Open or execute the selected artifact:
+`report.ipynb`. With no parameters, `generate_report(True)` includes only final
+output. `ReportParams` defines the dictionary fields; omitted fields use the
+defaults. Each factory call returns an independent dictionary. Plotting options
+such as `plot_1d_images`, `plot_2d_images`, their `*_indexes`, and
+`print_all_bkp_data` also belong in this dictionary.
+
+The same section flags select content for named-run and precision comparison
+reports; by default they compare only final products. Disabling report sections
+does not disable saving inputs, breakpoints or products. Custom analysis controls
+both pipeline-injected reporting and the editable custom-analysis example.
+Calls using separate report keyword arguments should be migrated to the dictionary.
+Open or execute the selected artifact:
 
 ```bash
 jupyter lab outputs/report.ipynb
