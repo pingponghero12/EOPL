@@ -1,7 +1,7 @@
 # EOPL
 
 Earth Observation Processing Library: algorithms and orchestration for scientific pipelines,
-NetCDF/Zarr products, checkpoints, and editable Python or Jupyter reports.
+NetCDF/Zarr products, checkpoints, and editable Python or Jupyter reports in context of ESA End-to-End simulators.
 
 Version 0.2.0 integrates the algorithms previously provided by EOPAL. The CPU workflows are
 covered by automated tests. CUDA code is retained, but GPU execution has not
@@ -220,3 +220,13 @@ If you use EOPL in research, please cite the software using
 [CITATION.cff](CITATION.cff), also available through GitHub's **Cite this
 repository** button. Academic citation is requested, not required by the
 Apache-2.0 license. Third-party dependencies retain their own licenses.
+
+## Roadmap
+
+- 0.2.0: Integrated processing algorithms and simpler, configurable reports.
+- 0.3.0: GPU execution using CuPy, with reliable memory transfers and
+  synchronization, validated on GPU hardware.
+- 0.4.0: Additional algorithm implementations with reference results and
+  practical examples.
+- Later: Further algorithms and potential Dask GPU execution using
+  CuPy-backed arrays.
