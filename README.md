@@ -118,6 +118,21 @@ python run.py global.xml local.xml input/input_image.nc outputs
 Paths are relative to the calling directory. The example config files and
 CCDBs remain in their respective example directories.
 
+Global and local configuration files can also be YAML mappings (`.yml` or `.yaml`):
+
+```yaml
+RandomSeed: 42
+scene:
+  spatial_step_m: 6.0
+  spectral_step_nm: 1.68
+```
+
+Use the same `add_global_config(path)` and `add_local_config(path)` methods.
+YAML preserves numbers, booleans, lists and nested mappings; XML parameter
+values remain strings. For modules called from another application, use
+`Pipeline(output_root="outputs/scene")` to select the output directory
+without parsing command-line arguments.
+
 ## Reports and run comparison
 
 Choose report sections and format together in `run.py`:
