@@ -33,14 +33,14 @@ class RunOptions:
     dask_chunk_direction: str = None # "ACT", "ALT", "Channels"
 
 class Pipeline:
-    def __init__(self):
+    def __init__(self, output_root="outputs/"):
         self.log = Log()
         self.local_config = {}
         self.global_config = {}
         self.ccdb = None
         self.rng = None
         self.manifest = {
-            "eopl_version": "0.2.0",
+            "eopl_version": "0.2.1",
             "operations": [],
             "breakpoints": [],
             "intermediates": [],
@@ -53,7 +53,7 @@ class Pipeline:
         
         # Internal state
         self._last_bkp_time = time.time()
-        self._output_root = Path("outputs/")
+        self._output_root = Path(output_root)
         self._start_time = time.time()
         self._is_pa_run = False
         self._comparison_manifest_path = None
@@ -256,7 +256,7 @@ class Pipeline:
     def parse_arguments(self, argv=None):
         """Parse ICD paths, precision replay, or a named comparison run."""
         parser = argparse.ArgumentParser(description="Run an EOPL pipeline")
-        parser.add_argument("paths", nargs="*", help="global.xml local.xml input.nc output")
+        parser.add_argument("paths", nargs="*", help="global.xml/yml local.xml/yml input.nc output")
         parser.add_argument("--precision-analysis", action="store_true")
         parser.add_argument("--dir", help="Save under output/NAME and compare with output's baseline run")
         options = parser.parse_args(argv)
@@ -287,15 +287,32 @@ class Pipeline:
 
         return args
 
-    def add_local_config(self, path: str):
+    @staticmethod
+    def _read_config(path):
+        """Read an XML parameter list or a YAML mapping."""
+        path = Path(path)
+        if path.suffix.lower() in (".yaml", ".yml"):
+            with path.open(encoding="utf-8") as handle:
+                config = yaml.safe_load(handle)
+            if config is None:
+                return {}
+            if not isinstance(config, dict) or not all(isinstance(key, str) for key in config):
+                raise ValueError(f"{path}: configuration must be a mapping with string keys.")
+            return config
+
         tree = ET.parse(path)
-        for param in tree.getroot().findall("parameter"):
-            self.local_config[param.attrib["name"]] = param.text
+        return {
+            param.attrib["name"]: param.text
+            for param in tree.getroot().findall("parameter")
+        }
+
+    def add_local_config(self, path: str):
+        """Load local XML or YAML settings; YAML retains nested mappings and types."""
+        self.local_config.update(self._read_config(path))
 
     def add_global_config(self, path: str):
-        tree = ET.parse(path)
-        for param in tree.getroot().findall("parameter"):
-            self.global_config[param.attrib["name"]] = param.text
+        """Load global XML or YAML settings and initialise the seeded generator."""
+        self.global_config.update(self._read_config(path))
         
         seed = int(self.global_config.get("RandomSeed", 0))
         self.rng = np.random.default_rng(seed=seed)
