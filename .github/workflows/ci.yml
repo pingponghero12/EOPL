@@ -20,7 +20,11 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install build
       - run: python -m build --wheel --outdir "$RUNNER_TEMP/wheels" -Ccmake.define.CMAKE_CUDA_COMPILER=NOTFOUND
-      - run: python -m pip install "$RUNNER_TEMP"/wheels/*.whl pytest pytest-cov nbformat
+      - name: Install wheel and test dependencies
+        env:
+          # Zarr 2 uses older numcodecs/Blosc sources that cannot compile as C23.
+          CFLAGS: -std=gnu17
+        run: python -m pip install "$RUNNER_TEMP"/wheels/*.whl pytest pytest-cov nbformat
       - name: Test the installed distribution outside the source checkout
         working-directory: ${{ runner.temp }}
         env:
