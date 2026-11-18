@@ -222,7 +222,7 @@ python -m pytest --cov=eopl --cov-report=term-missing --cov-report=html:coverage
 ```
 
 CI builds and installs the CPU distribution before running the tests on
-Python 3.10–3.12. It also checks source/wheel packaging and notebook structure.
+Python 3.10–3.15. It also checks source/wheel packaging and notebook structure.
 GPU transfer tests use mocked backends; the separate CUDA build job is a
 compilation check, not a hardware execution test.
 
