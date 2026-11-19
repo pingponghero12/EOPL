@@ -43,20 +43,6 @@ def test_invalid_dataset_and_dimension_count():
         image_t(np.zeros((2, 3)), dims=("x",))
 
 
-def test_freshness_state_transitions(make_eopl_image):
-    image = make_eopl_image()
-    assert image._device_dirty and not image._host_dirty
-    image._device_array = 12
-    image.mark_synchronized()
-    assert not image._device_dirty and not image._host_dirty
-    image.mark_device_modified()
-    assert image._host_dirty and not image._device_dirty
-    image.mark_host_modified()
-    assert image._device_dirty and not image._host_dirty
-    image.clear_device_state()
-    assert image._device_array is None and image._device_dirty
-
-
 def test_replace_image_requires_dataarray(make_eopl_image):
     image = make_eopl_image()
     with pytest.raises(TypeError, match="DataArray"):

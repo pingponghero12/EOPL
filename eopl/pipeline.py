@@ -14,7 +14,7 @@ import textwrap
 import argparse
 import xarray as xr
 
-from .data import image_t
+from .data import image_t, is_cupy_array, require_cupy
 from .exceptions import ShapeError
 from .ccdb import CCDB
 from .log import Log
@@ -73,16 +73,6 @@ class Pipeline:
         # Register the cleanup hook. This guarantees execution even on fatal Python exceptions.
         atexit.register(self.cleanup_temp_files)
 
-    def _free_vram(self, data: image_t):
-        if data is None:
-            return None
-
-        if data._device_array is not None:
-            self.log.debug(f"Freeing VRAM at pointer {data._device_array}")
-            data.release_device()
-
-        return data
-
     @staticmethod
     def _images(data):
         """Normalize the public one-image-or-tuple form without wrapping it."""
@@ -90,8 +80,7 @@ class Pipeline:
             return ()
         images = data if isinstance(data, tuple) else (data,)
         required = (
-            "image", "array_name", "is_dask", "mark_host_modified",
-            "mark_device_modified", "mark_synchronized", "release_device",
+            "image", "array_name", "is_dask", "to_device", "host_image", "release_device",
         )
         if not images or not all(
             all(hasattr(item, attribute) for attribute in required) for item in images
@@ -114,11 +103,6 @@ class Pipeline:
             )
         return access
 
-    def _sync_all_to_host(self, data):
-        for item in self._images(data):
-            self._sync_vram_to_host(item)
-        return data
-
     def _dataset_for_save(self, data=None, clean=True):
         images = self._images(data)
         names = [item.array_name for item in images]
@@ -131,11 +115,15 @@ class Pipeline:
         variables = xr.Dataset(
             {name: self._variables[name] for name in sorted(variable_names)}
         )
+        for name in variables.data_vars:
+            var = variables[name]
+            if is_cupy_array(var.variable._data):
+                variables[name] = var.copy(deep=False, data=require_cupy().asnumpy(var.data))
         overlap = set(names).intersection(variable_names)
         if overlap:
             raise ValueError(f"Image and pipeline variable names overlap: {sorted(overlap)}")
 
-        dataset = xr.Dataset({item.array_name: item.image() for item in images})
+        dataset = xr.Dataset({item.array_name: item.host_image() for item in images})
         dataset = xr.merge([dataset, variables], compat="no_conflicts")
         dataset.attrs["_eopl_image_names"] = json.dumps(names)
         dataset.attrs["_eopl_variable_names"] = json.dumps(sorted(variable_names))
@@ -167,59 +155,6 @@ class Pipeline:
         for item in images:
             self._enforce_precision(item)
         return result
-
-    def _ensure_vram(self, data: image_t):
-        """Make the device copy current, transferring only when it is stale or absent."""
-        from eopl import eopl_cpp_core
-
-        if not getattr(eopl_cpp_core, "HAS_CUDA_COMPILED", False):
-            raise RuntimeError("EOPL was built without CUDA support.")
-
-        image = data.image().values
-        if image.dtype != np.float32:
-            raise TypeError(
-                f"The current EOPL CUDA backend requires float32 image data, got {image.dtype}."
-            )
-        if image.ndim != 3:
-            raise ValueError(
-                f"The current EOPL CUDA backend requires a 3-D image, got {image.ndim}-D."
-            )
-        if not image.flags.c_contiguous:
-            raise ValueError("The current EOPL CUDA backend requires C-contiguous image data.")
-
-        layout = (tuple(image.shape), image.dtype.str, image.nbytes)
-        allocated_layout = (data._device_shape, data._device_dtype, data._device_nbytes)
-
-        if data._device_array is not None and allocated_layout != layout:
-            if data._host_dirty:
-                raise RuntimeError(
-                    "The image layout changed while the device held newer data; "
-                    "synchronize before replacing the host image."
-                )
-            data = self._free_vram(data)
-
-        if data._device_array is None:
-            self.log.debug("Allocating VRAM and copying the current host image.")
-            data._device_array = eopl_cpp_core.push_to_vram_numpy(image, 0)
-            data._device_shape, data._device_dtype, data._device_nbytes = layout
-            data.mark_synchronized()
-        elif data._device_dirty:
-            self.log.debug("Refreshing stale VRAM from the current host image.")
-            data._device_array = eopl_cpp_core.push_to_vram_numpy(
-                image, data._device_array
-            )
-            data.mark_synchronized()
-
-        return data
-
-    def _assert_no_vram_while_dask(self, data: image_t):
-        if (
-            data is not None
-            and data.is_dask
-            and data is not None
-            and data._device_array is not None
-        ):
-            raise RuntimeError("Internal error: Dask-backed data must not keep a VRAM pointer.")
 
     def start_bkp(self, label: str):
         """Configures the pipeline to skip all operations until it finds this breakpoint."""
@@ -351,7 +286,6 @@ class Pipeline:
         current_dtype = data.image().dtype
         if current_dtype.kind == "f" and current_dtype != target_dtype:
             data.data = data.image().astype(target_dtype)
-            data.mark_host_modified()
 
         return data
 
@@ -455,8 +389,6 @@ class Pipeline:
         dask_acc_chunks = dask_acc_chunks or ["Channels"]
 
         if dask_images:
-            for item in dask_images:
-                self._assert_no_vram_while_dask(item)
             if not func_supports_dask:
                 raise RuntimeError(
                     f"Operation '{func.__name__}' does not support Dask, "
@@ -487,56 +419,37 @@ class Pipeline:
         )
 
         if actual_cuda_used:
-            supported_dtypes = getattr(func, "cuda_dtypes", ("float32",))
+            supported_dtypes = getattr(func, "cuda_dtypes", None)
             for item in images:
                 image_dtype = str(item.image().dtype)
-                if image_dtype not in supported_dtypes:
+                if supported_dtypes is not None and image_dtype not in supported_dtypes:
                     raise TypeError(
                         f"Operation '{func.__name__}' supports CUDA dtypes "
                         f"{supported_dtypes}, got {image_dtype}."
                     )
-                self._ensure_vram(item)
-            current_run_options = self.run_options
-        else:
-            current_run_options = replace(
-                self.run_options,
-                use_cuda=False,
-                dask_enabled=bool(dask_images),
-            )
-            # A CPU operation only downloads device data that is newer.  Current
-            # device allocations remain cached for a later GPU operation.
             for item in images:
-                self._sync_vram_to_host(item)
+                item.to_device()
+        else:
+            for item in images:
+                item.release_device()
 
         if "run_options" in sig.parameters:
-            args["run_options"] = current_run_options
+            args["run_options"] = replace(
+                self.run_options, use_cuda=actual_cuda_used, dask_enabled=bool(dask_images)
+            )
         start_time = time.time()
-        try:
-            result = func(*images, **args)
-        except Exception:
-            if actual_cuda_used:
-                for item, mode in zip(images, access):
-                    if mode == "readwrite":
-                        item._host_dirty = False
-                        self._free_vram(item)
-            raise
+        result = func(*images, **args)
+        for item, mode in zip(images, access):
+            if mode == "readwrite":
+                self._enforce_precision(item)
+        returned = result if isinstance(result, tuple) else (result,)
+        for item in returned:
+            if isinstance(item, image_t) and not any(item is source for source in images):
+                self._enforce_precision(item)
 
+        # CUDA launches are asynchronous. Wait for the operation before recording its time.
         if actual_cuda_used:
-            for item, mode in zip(images, access):
-                if mode == "readwrite":
-                    item.mark_device_modified()
-        else:
-            for item, mode in zip(images, access):
-                if mode == "readwrite":
-                    item.mark_host_modified()
-                    self._enforce_precision(item)
-            returned = result if isinstance(result, tuple) else (result,)
-            for item in returned:
-                if all(
-                    hasattr(item, attribute)
-                    for attribute in ("image", "mark_host_modified", "array_name")
-                ) and not any(item is source for source in images):
-                    self._enforce_precision(item)
+            require_cupy().cuda.get_current_stream().synchronize()
 
         duration = time.time() - start_time
         backend_str = "CUDA" if actual_cuda_used else "CPU"
@@ -628,7 +541,6 @@ class Pipeline:
                     self.set_dask(item, False)
         needs_serialization = enabled
         if needs_serialization:
-            self._sync_all_to_host(data)
             filename.parent.mkdir(parents=True, exist_ok=True)
             dataset = self._dataset_for_save(data, clean=clean)
             if file_type == "nc":
@@ -675,8 +587,7 @@ class Pipeline:
                 f"Cannot chunk along missing dimension '{dask_chunk_direction}'."
             )
 
-        self._sync_vram_to_host(data)
-        self._free_vram(data)
+        data.release_device()
         if dask:
             data.data = data.image().chunk({
                 dim: "auto" if dim == dask_chunk_direction else -1
@@ -742,20 +653,6 @@ class Pipeline:
         self.add_variable(variable_name, variable, pinned=pinned, dims=dims)
         return data
 
-    def _sync_vram_to_host(self, data: image_t):
-        if data is None:
-            return None
-
-        if data._device_array is not None and data._host_dirty:
-            from eopl import eopl_cpp_core
-
-            eopl_cpp_core.copy_to_host_numpy(
-                data.image().values,
-                data._device_array,
-            )
-            data.mark_synchronized()
-        return data
-
     def save_output(self, data=None, label: str = None, file_type: str = "nc", clean: bool = True):
         """
         Saves the final dataset state to disk and registers it in the manifest.
@@ -773,7 +670,6 @@ class Pipeline:
         save_label = f"{label}_pa" if self._is_pa_run else label
         filename = self._output_root / f"{save_label}.{file_type}"
         filename.parent.mkdir(parents=True, exist_ok=True)
-        self._sync_all_to_host(data)
         dataset = self._dataset_for_save(data, clean=clean)
         if file_type == "nc":
             dataset.to_netcdf(filename)
@@ -815,7 +711,7 @@ class Pipeline:
             self.log.info("Precision analysis pipeline finished successfully. Precision report written.")
 
         for item in self._images(data):
-            self._free_vram(item)
+            item.release_device()
 
     def report_section(self, title: str):
         """Adds a main section to the generated report."""

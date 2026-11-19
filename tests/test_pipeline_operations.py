@@ -1,10 +1,10 @@
-import sys
 import types
 
 import numpy as np
 import pytest
 
 from eopl import Pipeline, image_t
+from eopl import pipeline as pipeline_module
 
 
 def test_single_input_and_direct_return(make_eopl_image):
@@ -155,125 +155,40 @@ def test_numpy_dask_numpy_and_rechunk_transitions(make_eopl_image):
     np.testing.assert_array_equal(image.image(), original)
 
 
-def test_cuda_cache_moves_only_when_freshness_changes(monkeypatch, make_eopl_image):
-    calls = {"push": [], "copy": [], "free": []}
+def test_cuda_dispatch_and_cpu_handoff(monkeypatch, make_eopl_image):
+    events = []
+    monkeypatch.setattr(image_t, "to_device", lambda image: events.append(("upload", image)))
+    monkeypatch.setattr(image_t, "release_device", lambda image: events.append(("host", image)))
+    stream = types.SimpleNamespace(synchronize=lambda: events.append(("sync", None)))
+    cupy = types.SimpleNamespace(cuda=types.SimpleNamespace(get_current_stream=lambda: stream))
+    monkeypatch.setattr(pipeline_module, "require_cupy", lambda: cupy)
 
-    class Core:
-        HAS_CUDA_COMPILED = True
-
-        @staticmethod
-        def push_to_vram_numpy(array, pointer):
-            calls["push"].append(pointer)
-            return pointer or 101
-
-        @staticmethod
-        def copy_to_host_numpy(array, pointer):
-            calls["copy"].append(pointer)
-
-        @staticmethod
-        def free_vram(pointer):
-            calls["free"].append(pointer)
-
-    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", Core, raising=False)
-
-    pipeline = Pipeline()
-    pipeline.set_run_options(use_cuda=True)
-    image = make_eopl_image()
-
-    def gpu_operation(value, run_options):
-        assert run_options.use_cuda
-        return value
-
-    gpu_operation.cuda_support = True
-    gpu_operation.cuda_dtypes = ("float32",)
-    gpu_operation.input_access = ("readwrite",)
-
-    pipeline.run_operation(image, gpu_operation)
-    pipeline.run_operation(image, gpu_operation)
-    assert calls["push"] == [0]
-    assert calls["copy"] == []
+    def gpu_operation(first, second, run_options):
+        assert run_options.use_cuda and not run_options.dask_enabled
+        return first
 
     def cpu_operation(value, run_options):
         assert not run_options.use_cuda
         return value
 
-    pipeline.run_operation(image, cpu_operation)
-    assert calls["copy"] == [101]
-    assert image._device_array == 101
-
-    pipeline.run_operation(image, gpu_operation)
-    assert calls["push"] == [0, 101]
-    assert calls["copy"] == [101]
-    image.release_device()
-    assert calls["free"] == [101]
-
-
-def test_cuda_tuple_inputs_are_cached_independently(monkeypatch, make_eopl_image):
-    pushed = []
-
-    class Core:
-        HAS_CUDA_COMPILED = True
-
-        @staticmethod
-        def push_to_vram_numpy(array, pointer):
-            result = pointer or 200 + len(pushed)
-            pushed.append((array.shape, pointer))
-            return result
-
-        @staticmethod
-        def free_vram(pointer):
-            pass
-
-    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", Core, raising=False)
+    gpu_operation.cuda_support = True
     pipeline = Pipeline()
     pipeline.set_run_options(use_cuda=True)
     first, second = make_eopl_image(name="first"), make_eopl_image(name="second")
 
-    def combine(a, b, run_options):
-        return a
-
-    combine.cuda_support = True
-    combine.input_access = ("read", "read")
-    pipeline.run_operation((first, second), combine)
-    pipeline.run_operation((first, second), combine)
-    assert len(pushed) == 2
-    first.clear_device_state()
-    second.clear_device_state()
+    assert pipeline.run_operation((first, second), gpu_operation) is first
+    assert pipeline.run_operation(first, cpu_operation) is first
+    assert events == [("upload", first), ("upload", second), ("sync", None), ("host", first)]
+    assert [operation["backend"] for operation in pipeline.manifest["operations"]] == [
+        "CUDA", "CPU"
+    ]
 
 
-def test_read_only_cpu_operation_keeps_current_device_cache(monkeypatch, make_eopl_image):
-    copied = []
+def test_cuda_validates_explicit_dtype_before_upload(monkeypatch, make_eopl_image):
+    def unexpected_upload(image):
+        pytest.fail("The dtype should be rejected before upload")
 
-    class Core:
-        @staticmethod
-        def copy_to_host_numpy(array, pointer):
-            copied.append(pointer)
-
-        @staticmethod
-        def free_vram(pointer):
-            pass
-
-    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", Core, raising=False)
-    image = make_eopl_image()
-    image._device_array = 55
-    image._device_shape = image.image().shape
-    image._device_dtype = image.image().dtype.str
-    image._device_nbytes = image.image().nbytes
-    image.mark_synchronized()
-
-    def inspect_only(value):
-        return float(value.image().mean())
-
-    inspect_only.input_access = ("read",)
-    assert Pipeline().run_operation(image, inspect_only) == 11.5
-    assert copied == []
-    assert not image._device_dirty and not image._host_dirty
-    image.clear_device_state()
-
-
-def test_cuda_build_and_layout_preconditions(monkeypatch, make_eopl_image):
-    core = types.SimpleNamespace(HAS_CUDA_COMPILED=False)
-    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", core, raising=False)
+    monkeypatch.setattr(image_t, "to_device", unexpected_upload)
     pipeline = Pipeline()
     pipeline.set_run_options(use_cuda=True)
 
@@ -281,46 +196,9 @@ def test_cuda_build_and_layout_preconditions(monkeypatch, make_eopl_image):
         return value
 
     operation.cuda_support = True
-    with pytest.raises(RuntimeError, match="without CUDA"):
-        pipeline.run_operation(make_eopl_image(), operation)
-
-    core.HAS_CUDA_COMPILED = True
+    operation.cuda_dtypes = ("float32",)
     with pytest.raises(TypeError, match="supports CUDA dtypes"):
         pipeline.run_operation(make_eopl_image(dtype=np.uint32), operation)
-    with pytest.raises(ValueError, match="3-D"):
-        pipeline.run_operation(
-            image_t(np.ones((2, 2), dtype=np.float32), dims=("ALT", "ACT")),
-            operation,
-        )
-
-
-def test_failed_cuda_write_releases_uncertain_device_copy(monkeypatch, make_eopl_image):
-    freed = []
-
-    class Core:
-        HAS_CUDA_COMPILED = True
-
-        @staticmethod
-        def push_to_vram_numpy(array, pointer):
-            return pointer or 99
-
-        @staticmethod
-        def free_vram(pointer):
-            freed.append(pointer)
-
-    monkeypatch.setattr(sys.modules["eopl"], "eopl_cpp_core", Core, raising=False)
-    pipeline = Pipeline()
-    pipeline.set_run_options(use_cuda=True)
-    image = make_eopl_image()
-
-    def failing(value):
-        raise RuntimeError("kernel failed")
-
-    failing.cuda_support = True
-    with pytest.raises(RuntimeError, match="kernel failed"):
-        pipeline.run_operation(image, failing)
-    assert freed == [99]
-    assert image._device_array is None
 
 
 def test_invalid_operation_input_and_access_metadata(make_eopl_image):
