@@ -56,6 +56,9 @@ def apply_gain_1d(data: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray],
     image_t
         The modified data object.
     """
+    if run_options.use_cuda and not data.is_dask:
+        return _apply_gain_1d_cupy(data, gain_array_1d, apply_dimension)
+
     _apply_gain_1d_contract(
         dict(data.image().sizes),
         {"gain_array_1d": gain_array_1d, "apply_dimension": apply_dimension},
@@ -82,7 +85,8 @@ def apply_gain_1d(data: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray],
 
 # Attach the contract and flags to the function
 apply_gain_1d.eopl_shape_contract = _apply_gain_1d_contract
-apply_gain_1d.cuda_support = False
+apply_gain_1d.cuda_support = True
+apply_gain_1d.cuda_dtypes = ("float32", "float64", "uint32")
 apply_gain_1d.dask_support = True
 apply_gain_1d.input_access = ("readwrite",)
 apply_gain_1d.shape_contract = _apply_gain_1d_contract
@@ -108,7 +112,7 @@ except ImportError:
     HAS_CPP_CORE = False
 
 def apply_gain_1d_cpp(pdata: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray], run_options: Any, apply_dimension: str = "ACT") -> image_t:
-    """C++/CUDA backend for apply_gain_1d."""
+    """Use the C++ CPU gain or delegate CUDA execution to CuPy."""
     if run_options.use_cuda:
         return _apply_gain_1d_cupy(pdata, gain_array_1d, apply_dimension)
     if not HAS_CPP_CORE:
