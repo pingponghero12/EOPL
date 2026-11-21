@@ -119,10 +119,7 @@ def test_operation_capabilities_are_declared():
     assert apply_gain_1d_cpp.input_access == ("readwrite",)
 
 
-def test_legacy_gain_imports_use_the_packaged_algorithms():
+def test_top_level_gain_uses_the_packaged_algorithm():
     from eopl import apply_gain_1d as top_level_gain
-    from eopl.ops.gain import apply_gain_1d as legacy_gain
-    from eopl.ops.gain import apply_gain_1d_cpp as legacy_cpp_gain
 
-    assert top_level_gain is legacy_gain is apply_gain_1d
-    assert legacy_cpp_gain is apply_gain_1d_cpp
+    assert top_level_gain is apply_gain_1d

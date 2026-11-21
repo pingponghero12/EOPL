@@ -44,7 +44,6 @@ where documented; gain operates on EOPL's `image_t`. Functions declare their
 Dask and CUDA capabilities. The Python and Dask gain variants share Xarray's
 broadcasting implementation. `apply_gain_1d` uses CuPy when EOPL selects CUDA,
 and `apply_gain_1d_cpp` uses the packaged native core for CPU execution.
-Existing `eopl.ops.gain` imports continue to work.
 
 ## Operation interface
 
