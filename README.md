@@ -21,12 +21,7 @@ python -m pip install -e '.[test,notebook]'
 The source build requires a C++17 compiler and CMake 3.22 or newer. Build
 isolation installs its Python build dependencies. This release uses Xarray
 below 2026.4 with Zarr-Python 2.x; newer Xarray releases require Zarr-Python 3.
-CMake detects CUDA when available; to explicitly build the CPU version:
-
-```bash
-python -m pip install -e '.[test,notebook]' \
-  -Ccmake.define.CMAKE_CUDA_COMPILER=NOTFOUND
-```
+The native extension builds C++ CPU operations. CuPy handles GPU execution at runtime.
 
 The algorithms and native gain core are included; no separate EOPAL installation
 is required. A notebook frontend

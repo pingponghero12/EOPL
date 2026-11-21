@@ -30,4 +30,4 @@ def test_native_cpu_gain_rejects_unsupported_dtypes(dtype):
     image = np.ones((2, 3, 4), dtype=dtype)
     gain = np.ones(4, dtype=dtype)
     with pytest.raises(ValueError, match='CPU execution supports'):
-        core.apply_gain_1d(image, gain, False, False, 0, 'ACT')
+        core.apply_gain_1d(image, gain, 'ACT')

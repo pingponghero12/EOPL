@@ -151,7 +151,7 @@ def apply_gain_1d_cpp(pdata: image_t, gain_array_1d: Union[np.ndarray, xr.DataAr
     if gain_np.ndim != 1:
         raise ValueError(f"gain_array_1d must be 1-D, got {gain_np.ndim}-D.")
 
-    eopl_cpp_core.apply_gain_1d(img_np, gain_np, False, False, 0, apply_dimension)
+    eopl_cpp_core.apply_gain_1d(img_np, gain_np, apply_dimension)
 
     return pdata
 

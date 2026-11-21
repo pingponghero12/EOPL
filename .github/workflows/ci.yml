@@ -20,7 +20,7 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install build
-      - run: python -m build --wheel --outdir "$RUNNER_TEMP/wheels" -Ccmake.define.CMAKE_CUDA_COMPILER=NOTFOUND
+      - run: python -m build --wheel --outdir "$RUNNER_TEMP/wheels"
       - name: Install wheel and test dependencies
         env:
           # Zarr 2 uses older numcodecs/Blosc sources that cannot compile as C23.
@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install build twine
-      - run: python -m build --outdir "$RUNNER_TEMP/dist" -Ccmake.define.CMAKE_CUDA_COMPILER=NOTFOUND
+      - run: python -m build --outdir "$RUNNER_TEMP/dist"
       - run: python -m twine check "$RUNNER_TEMP"/dist/*
 
   cuda-build:
@@ -52,7 +52,4 @@ jobs:
     container: nvidia/cuda:12.4.1-devel-ubuntu22.04
     steps:
       - uses: actions/checkout@v4
-      - run: apt-get update && apt-get install -y python3 python3-pip
-      - run: python3 -m pip install --upgrade pip build
-      - run: python3 -m build --wheel
       - run: nvcc -std=c++17 -arch=compute_75 --ptx eopl/algorithms/cuda/scale_image.cu -o /tmp/scale_image.ptx
