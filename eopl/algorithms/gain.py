@@ -56,7 +56,7 @@ def apply_gain_1d(data: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray],
     image_t
         The modified data object.
     """
-    if run_options.use_cuda and not data.is_dask:
+    if getattr(run_options, "use_cuda", False) and not data.is_dask:
         return _apply_gain_1d_cupy(data, gain_array_1d, apply_dimension)
 
     _apply_gain_1d_contract(
@@ -94,7 +94,7 @@ apply_gain_1d.shape_contract = _apply_gain_1d_contract
 
 def apply_gain_1d_dask(data: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray], run_options: Any, apply_dimension: str = "ACT") -> image_t:
     """Apply gain lazily using the same Xarray operations on Dask-backed data."""
-    return apply_gain_1d(data, gain_array_1d, run_options, apply_dimension)
+    return apply_gain_1d(data, gain_array_1d, None, apply_dimension)
 
 
 apply_gain_1d_dask.shape_contract = _apply_gain_1d_contract

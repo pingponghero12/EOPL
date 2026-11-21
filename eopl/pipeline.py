@@ -670,6 +670,8 @@ class Pipeline:
         save_label = f"{label}_pa" if self._is_pa_run else label
         filename = self._output_root / f"{save_label}.{file_type}"
         filename.parent.mkdir(parents=True, exist_ok=True)
+        for item in self._images(data):
+            item.release_device()
         dataset = self._dataset_for_save(data, clean=clean)
         if file_type == "nc":
             dataset.to_netcdf(filename)

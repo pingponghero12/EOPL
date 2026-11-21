@@ -55,3 +55,4 @@ jobs:
       - run: apt-get update && apt-get install -y python3 python3-pip
       - run: python3 -m pip install --upgrade pip build
       - run: python3 -m build --wheel
+      - run: nvcc -std=c++17 -arch=compute_75 --ptx eopl/algorithms/cuda/scale_image.cu -o /tmp/scale_image.ptx

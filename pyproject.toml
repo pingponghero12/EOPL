@@ -43,6 +43,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cuda12 = ["cupy-cuda12x"]
 notebook = [
     "jupyterlab",
     "ipykernel",
