@@ -113,7 +113,7 @@ def test_native_cpu_rejects_noncontiguous_image(options):
 
 def test_operation_capabilities_are_declared():
     assert apply_gain_1d.dask_support
-    assert not apply_gain_1d.cuda_support
+    assert apply_gain_1d.cuda_support
     assert apply_gain_1d_cpp.cuda_support
     assert apply_gain_1d_cpp.cuda_dtypes == ("float32",)
     assert apply_gain_1d_cpp.input_access == ("readwrite",)

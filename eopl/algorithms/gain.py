@@ -1,7 +1,7 @@
 import numpy as np
 import xarray as xr
 from typing import Any, Union
-from ..data import image_t
+from ..data import image_t, require_cupy
 from ..exceptions import ShapeError
 from ..log import Log
 
@@ -56,6 +56,9 @@ def apply_gain_1d(data: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray],
     image_t
         The modified data object.
     """
+    if getattr(run_options, "use_cuda", False) and not data.is_dask:
+        return _apply_gain_1d_cupy(data, gain_array_1d, apply_dimension)
+
     _apply_gain_1d_contract(
         dict(data.image().sizes),
         {"gain_array_1d": gain_array_1d, "apply_dimension": apply_dimension},
@@ -82,7 +85,8 @@ def apply_gain_1d(data: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray],
 
 # Attach the contract and flags to the function
 apply_gain_1d.eopl_shape_contract = _apply_gain_1d_contract
-apply_gain_1d.cuda_support = False
+apply_gain_1d.cuda_support = True
+apply_gain_1d.cuda_dtypes = ("float32", "float64", "uint32")
 apply_gain_1d.dask_support = True
 apply_gain_1d.input_access = ("readwrite",)
 apply_gain_1d.shape_contract = _apply_gain_1d_contract
@@ -90,7 +94,7 @@ apply_gain_1d.shape_contract = _apply_gain_1d_contract
 
 def apply_gain_1d_dask(data: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray], run_options: Any, apply_dimension: str = "ACT") -> image_t:
     """Apply gain lazily using the same Xarray operations on Dask-backed data."""
-    return apply_gain_1d(data, gain_array_1d, run_options, apply_dimension)
+    return apply_gain_1d(data, gain_array_1d, None, apply_dimension)
 
 
 apply_gain_1d_dask.shape_contract = _apply_gain_1d_contract
@@ -108,7 +112,9 @@ except ImportError:
     HAS_CPP_CORE = False
 
 def apply_gain_1d_cpp(pdata: image_t, gain_array_1d: Union[np.ndarray, xr.DataArray], run_options: Any, apply_dimension: str = "ACT") -> image_t:
-    """C++/CUDA backend for apply_gain_1d."""
+    """Use the C++ CPU gain or delegate CUDA execution to CuPy."""
+    if run_options.use_cuda:
+        return _apply_gain_1d_cupy(pdata, gain_array_1d, apply_dimension)
     if not HAS_CPP_CORE:
         raise RuntimeError("C++/CUDA core module is not installed or failed to import.")
 
@@ -127,11 +133,8 @@ def apply_gain_1d_cpp(pdata: image_t, gain_array_1d: Union[np.ndarray, xr.DataAr
             "('Channels', 'ALT', 'ACT')."
         )
     img_np = image.values
-    use_cuda = run_options.use_cuda
     cpu_dtypes = (np.dtype("float32"), np.dtype("float64"), np.dtype("uint32"))
-    if use_cuda and img_np.dtype != np.float32:
-        raise TypeError(f"apply_gain_1d_cpp CUDA requires float32 image data, got {img_np.dtype}.")
-    if not use_cuda and img_np.dtype not in cpu_dtypes:
+    if img_np.dtype not in cpu_dtypes:
         raise TypeError(
             f"apply_gain_1d_cpp CPU supports float32, float64, and uint32; got {img_np.dtype}."
         )
@@ -148,28 +151,31 @@ def apply_gain_1d_cpp(pdata: image_t, gain_array_1d: Union[np.ndarray, xr.DataAr
     if gain_np.ndim != 1:
         raise ValueError(f"gain_array_1d must be 1-D, got {gain_np.ndim}-D.")
 
-    # Get the opaque integer pointer (0 if None)
-    dev_ptr_int = pdata._device_array or 0
-
-    # Extract execution parameters from the RunOptions dataclass
-    # Call the Pybind function.
-    # Because of pybind11 buffer_info, img_np is modified IN PLACE.
-    log.info(f"Use cuda: {use_cuda}")
-    _, new_dev_ptr = eopl_cpp_core.apply_gain_1d(
-        img_np, gain_np, use_cuda, False, dev_ptr_int, apply_dimension
-    )
-
-    # Update pdata state
-    if use_cuda:
-        pdata._device_array = new_dev_ptr
-        pdata._device_shape = tuple(img_np.shape)
-        pdata._device_dtype = img_np.dtype.str
-        pdata._device_nbytes = img_np.nbytes
-        pdata.mark_device_modified()
-    else:
-        pdata.mark_host_modified()
+    eopl_cpp_core.apply_gain_1d(img_np, gain_np, apply_dimension)
 
     return pdata
+
+def _apply_gain_1d_cupy(data, gain_array_1d, apply_dimension):
+    """Apply a dimension-aligned gain on the current CUDA device."""
+    cupy = require_cupy()
+    _apply_gain_1d_contract(
+        dict(data.image().sizes),
+        {"gain_array_1d": gain_array_1d, "apply_dimension": apply_dimension},
+    )
+    data.to_device()
+    image = data.image()
+    if isinstance(gain_array_1d, xr.DataArray):
+        gain_array_1d = gain_array_1d.copy(
+            deep=False, data=cupy.asarray(gain_array_1d.data, dtype=image.dtype)
+        )
+    else:
+        gain_array_1d = xr.DataArray(
+            cupy.asarray(gain_array_1d, dtype=image.dtype), dims=(apply_dimension,)
+        )
+    result = (image * gain_array_1d).transpose(*image.dims)
+    data.replace_image(result.astype(image.dtype, copy=False))
+    return data
+
 
 # Attach flags for the Pipeline to read
 apply_gain_1d_cpp.cuda_support = True

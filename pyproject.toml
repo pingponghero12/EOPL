@@ -43,6 +43,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cuda12 = ["cupy-cuda12x"]
 notebook = [
     "jupyterlab",
     "ipykernel",
@@ -82,7 +83,3 @@ test-command = [
     'python -m pytest "{project}/tests"',
 ]
 environment = { MPLBACKEND = "Agg" }
-
-[tool.cibuildwheel.config-settings]
-# Published wheels run on machines without the CUDA toolkit.
-"cmake.define.CMAKE_CUDA_COMPILER" = "NOTFOUND"

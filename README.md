@@ -4,8 +4,8 @@ Earth Observation Processing Library: algorithms and orchestration for scientifi
 NetCDF/Zarr products, checkpoints, and editable Python or Jupyter reports in context of ESA End-to-End simulators.
 
 Version 0.2.0 integrates the algorithms previously provided by EOPAL. The CPU workflows are
-covered by automated tests. CUDA code is retained, but GPU execution has not
-been validated for this release.
+covered by automated tests. CuPy GPU support is optional and is checked by
+compilation and tests with simulated transfers. GPU execution still needs validation on hardware.
 
 ## Installation
 
@@ -21,12 +21,7 @@ python -m pip install -e '.[test,notebook]'
 The source build requires a C++17 compiler and CMake 3.22 or newer. Build
 isolation installs its Python build dependencies. This release uses Xarray
 below 2026.4 with Zarr-Python 2.x; newer Xarray releases require Zarr-Python 3.
-CMake detects CUDA when available; to explicitly build the CPU version:
-
-```bash
-python -m pip install -e '.[test,notebook]' \
-  -Ccmake.define.CMAKE_CUDA_COMPILER=NOTFOUND
-```
+The native extension builds C++ CPU operations. CuPy handles GPU execution at runtime.
 
 The algorithms and native gain core are included; no separate EOPAL installation
 is required. A notebook frontend
@@ -47,7 +42,8 @@ convolution, simplex projection, projected and nonnegative linear unmixing,
 error metrics and spectral angle. Array operations accept NumPy or Xarray
 where documented; gain operates on EOPL's `image_t`. Functions declare their
 Dask and CUDA capabilities. The Python and Dask gain variants share Xarray's
-broadcasting implementation; the C++ variant uses the packaged native core.
+broadcasting implementation. `apply_gain_1d` uses CuPy when EOPL selects CUDA,
+and `apply_gain_1d_cpp` uses the packaged native core for CPU execution.
 Existing `eopl.ops.gain` imports continue to work.
 
 ## Operation interface
@@ -82,6 +78,32 @@ Use `run_function` for image-free computations. Store their outputs with
 `add_variable`; variables are combined with images into a Dataset when saving.
 `pinned=True` keeps a variable available after checkpoints clean temporary
 variables. `start_bkp(label)` resumes from a previously saved checkpoint.
+
+### CuPy and custom CUDA kernels
+
+For CUDA 12, run `python -m pip install '.[cuda12]'` from this checkout.
+A compatible NVIDIA driver and GPU are required at runtime.
+For other CUDA versions, install the matching CuPy distribution from the
+[CuPy installation guide](https://docs.cupy.dev/en/stable/install.html).
+
+```python
+from eopl.algorithms.cuda_example import scale_image
+
+pipeline.set_run_options(use_cuda=True, precision="float32")
+image = pipeline.run_operation(image, scale_image, {"factor": 2})
+```
+
+CUDA operations receive CuPy pixels through `data.image().data`. Use ordinary
+CuPy expressions, or load a `.cu` file with `cupy.RawModule(code=...)` and pass
+the arrays directly to the kernel. The [Python wrapper](eopl/algorithms/cuda_example.py)
+and [CUDA source](eopl/algorithms/cuda/scale_image.cu) show the full example.
+To return a new image, use `image_t(image.copy(deep=False, data=result))` to retain
+the Xarray coordinates, units and name.
+
+Consecutive CUDA operations keep their images on the GPU. Checkpoint writes use a
+host copy, and CPU operations bring their inputs back to host memory. Outside the
+pipeline, call `data.host_image()` to inspect a GPU result with NumPy. Dask-backed
+inputs use the Dask path.
 
 ## Examples
 
@@ -223,8 +245,8 @@ python -m pytest --cov=eopl --cov-report=term-missing --cov-report=html:coverage
 
 CI builds and installs the CPU distribution before running the tests on
 Python 3.10–3.15. It also checks source/wheel packaging and notebook structure.
-GPU transfer tests use mocked backends; the separate CUDA build job is a
-compilation check, not a hardware execution test.
+The CUDA build job also compiles the custom kernel to PTX. The hardware test
+runs when CuPy can access an NVIDIA GPU.
 
 ## License and citation
 
