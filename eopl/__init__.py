@@ -2,6 +2,8 @@ from .data import image_t, p_data
 from .algorithms.gain import apply_gain_1d
 from .pipeline import Pipeline, RunOptions
 from .report_config import ReportParams, default_report_params
+from .validation import operation_compare_test, operation_numerical_test
 
 __all__ = ["Pipeline", "RunOptions", "ReportParams", "default_report_params",
-           "apply_gain_1d", "image_t", "p_data"]
+           "apply_gain_1d", "image_t", "p_data",
+           "operation_compare_test", "operation_numerical_test"]

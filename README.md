@@ -242,6 +242,31 @@ python -m pytest
 python -m pytest --cov=eopl --cov-report=term-missing --cov-report=html:coverage_html
 ```
 
+For a backend comparison, call both implementations with the same inputs:
+
+```python
+from eopl import operation_compare_test, operation_numerical_test
+
+assert operation_compare_test(cpu_operation, gpu_operation, image, rtol=1e-6, atol=1e-8)
+```
+
+For a reproducible rounding-error study, install the optional dependency with
+`python -m pip install '.[numerics]'`. Pass an operation instrumented for
+stochastic rounding, for example a binding built with Verificarlo, and an
+independent reference result:
+
+```python
+assert operation_numerical_test(instrumented_operation, reference_result, image, min_bits=20)
+```
+
+The helper uses Verificarlo's [significantdigits](https://github.com/verificarlo/significantdigits)
+estimator on 60 runs by default. It estimates significant bits for each output
+element relative to the reference, so the threshold also catches consistent bias.
+Keep the scientific inputs and seeds fixed and vary the rounding perturbations
+independently. Ordinary Python, NumPy or CuPy calls do not acquire stochastic
+rounding through this helper. Use small test inputs and a trusted reference.
+When the reference is zero, one input unit sets the absolute error scale.
+
 CI builds and installs the CPU distribution before running the tests on
 Python 3.10–3.15. It also checks source/wheel packaging and notebook structure.
 The CUDA build job also compiles the custom kernel to PTX. The hardware test

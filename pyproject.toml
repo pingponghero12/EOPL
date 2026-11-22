@@ -43,6 +43,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+numerics = ["significantdigits>=0.6,<1"]
 cuda12 = ["cupy-cuda12x"]
 notebook = [
     "jupyterlab",
