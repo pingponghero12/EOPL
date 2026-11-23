@@ -40,7 +40,7 @@ class Pipeline:
         self.ccdb = None
         self.rng = None
         self.manifest = {
-            "eopl_version": "0.2.1",
+            "eopl_version": "0.3.0",
             "operations": [],
             "breakpoints": [],
             "intermediates": [],
